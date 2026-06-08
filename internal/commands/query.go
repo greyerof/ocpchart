@@ -37,6 +37,7 @@ be prompted to select one (or navigate them in interactive mode).`,
 	RunE: runQuery,
 }
 
+// init registers query command flags and adds the command to root.
 func init() {
 	f := queryCmd.Flags()
 	f.DurationVar(&flagQuerySince, "since", 0, "how far back to query (required, e.g. 1h, 30m)")
@@ -51,6 +52,7 @@ func init() {
 	rootCmd.AddCommand(queryCmd)
 }
 
+// runQuery executes a one-shot range query and renders the selected series.
 func runQuery(cmd *cobra.Command, args []string) error {
 	promql := args[0]
 
@@ -91,6 +93,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// buildQueryWindow resolves start/end timestamps and query step from flags.
 func buildQueryWindow() (time.Time, time.Time, time.Duration, error) {
 	end := time.Now()
 	if flagQueryUntil != "" {
@@ -110,6 +113,7 @@ func buildQueryWindow() (time.Time, time.Time, time.Duration, error) {
 	return start, end, step, nil
 }
 
+// selectSeries lets the user choose one series when multiple are returned.
 func selectSeries(series []thanos.Series) (thanos.Series, error) {
 	if len(series) == 1 {
 		return series[0], nil
@@ -137,6 +141,7 @@ func selectSeries(series []thanos.Series) (thanos.Series, error) {
 	return series[idx-1], nil
 }
 
+// parseUntil parses --until as either a relative duration or RFC3339 timestamp.
 func parseUntil(s string) (time.Time, error) {
 	// Try as Go duration relative to now
 	d, err := time.ParseDuration(s)

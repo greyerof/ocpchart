@@ -31,10 +31,10 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 	}
 	defer func() {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("\033[?25h")
+		showTerminalCursor()
 	}()
 
-	fmt.Print("\033[?25l")
+	hideTerminalCursor()
 
 	state, lastRefresh, err := initLiveState(ctx, opts, oldState)
 	if err != nil {
@@ -54,6 +54,7 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 	return runLiveInputLoop(&mu, state, &lastRefresh, opts.Refresh)
 }
 
+// initLiveState fetches initial data and constructs the live interactive state.
 func initLiveState(ctx context.Context, opts LiveOptions, oldState *term.State) (*InteractiveState, time.Time, error) {
 	series, err := fetchLive(ctx, opts)
 	if err != nil {
@@ -69,6 +70,7 @@ func initLiveState(ctx context.Context, opts LiveOptions, oldState *term.State) 
 	return NewInteractiveState(series, opts.Query), time.Now(), nil
 }
 
+// startLiveRefreshLoop starts the background ticker loop for data refresh.
 func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
 	go func() {
 		ticker := time.NewTicker(opts.Refresh)
@@ -85,6 +87,7 @@ func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex,
 	}()
 }
 
+// refreshLiveState fetches fresh data and redraws the frame when data is valid.
 func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
 	newSeries, fetchErr := fetchLive(ctx, opts)
 	if fetchErr != nil || len(newSeries) == 0 {
@@ -98,6 +101,7 @@ func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, sta
 	mu.Unlock()
 }
 
+// updateLiveSeries replaces the current series set while preserving valid index state.
 func updateLiveSeries(state *InteractiveState, series []thanos.Series) {
 	prevIdx := state.SeriesIndex
 	state.AllSeries = series
@@ -107,6 +111,7 @@ func updateLiveSeries(state *InteractiveState, series []thanos.Series) {
 	state.resetViewport()
 }
 
+// runLiveInputLoop handles keyboard interaction for live mode.
 func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time, refreshInterval time.Duration) error {
 	buf := make([]byte, 3)
 
@@ -130,6 +135,7 @@ func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time
 	}
 }
 
+// fetchLive executes a range query for the current rolling live window.
 func fetchLive(ctx context.Context, opts LiveOptions) ([]thanos.Series, error) {
 	now := time.Now()
 	start := now.Add(-opts.Since)
@@ -137,6 +143,7 @@ func fetchLive(ctx context.Context, opts LiveOptions) ([]thanos.Series, error) {
 	return opts.Client.RangeQuery(ctx, opts.Query, start, now, opts.Step)
 }
 
+// renderLiveFrame renders one full-screen frame for live mode.
 func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) {
 	termW, termH := config.TerminalSize()
 
@@ -149,17 +156,18 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\033[2J\033[H")
+	clearScreenAndMoveHome(&sb)
 	sb.WriteString(graph)
 	sb.WriteString("\r\n")
-	fmt.Fprintf(&sb, "\033[%d;1H", termH-1)
-	fmt.Fprintf(&sb, "%-*s", termW, status)
-	fmt.Fprintf(&sb, "\033[%d;1H", termH)
-	fmt.Fprintf(&sb, "%-*s", termW, controls)
+	moveCursor(&sb, termH-1, 1)
+	writePaddedLine(&sb, termW, status)
+	moveCursor(&sb, termH, 1)
+	writePaddedLine(&sb, termW, controls)
 
 	fmt.Print(sb.String())
 }
 
+// liveGraph builds the chart body rendered in live mode.
 func liveGraph(s *InteractiveState, termW, termH int) string {
 	cur := s.currentSeries()
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
@@ -167,9 +175,10 @@ func liveGraph(s *InteractiveState, termW, termH int) string {
 	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
 
 	opts := buildChartOptions(viewVals, viewTimes, termW, termH-2, caption)
-	return strings.ReplaceAll(asciigraph.Plot(viewVals, opts...), "\n", "\r\n")
+	return toCRLF(asciigraph.Plot(viewVals, opts...))
 }
 
+// liveStatusLine formats the status line shown above live mode controls.
 func liveStatusLine(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) string {
 	cur := s.currentSeries()
 	labels := thanos.LabelSetString(cur.Labels)

@@ -26,6 +26,7 @@ Use --filter to match a subset with a regular expression.`,
 	RunE: runMetricsList,
 }
 
+// init registers metrics subcommands and their flags.
 func init() {
 	metricsListCmd.Flags().StringVarP(&flagMetricFilter, "filter", "f", "", "regex to filter metric names")
 
@@ -33,6 +34,7 @@ func init() {
 	rootCmd.AddCommand(metricsCmd)
 }
 
+// runMetricsList fetches and prints metric names, optionally filtered by regex.
 func runMetricsList(cmd *cobra.Command, args []string) error {
 	client, err := resolveClient()
 	if err != nil {

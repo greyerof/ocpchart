@@ -30,6 +30,7 @@ auto-refresh, and metric discovery.`,
 	SilenceUsage: true,
 }
 
+// init registers root-level persistent auth and TLS flags.
 func init() {
 	pf := rootCmd.PersistentFlags()
 	pf.StringVar(&flagKubeconfig, "kubeconfig", "", "path to kubeconfig (defaults to $KUBECONFIG)")

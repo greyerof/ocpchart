@@ -108,6 +108,7 @@ func buildChartOptions(values []float64, times []time.Time, totalWidth, totalHei
 	}
 }
 
+// chooseYLabelScale picks a compact unit scale for large Y-axis values.
 func chooseYLabelScale(minVal, maxVal float64) yLabelScale {
 	peak := max(math.Abs(minVal), math.Abs(maxVal))
 	if peak < yLabelFormatThreshold {
@@ -123,6 +124,7 @@ func chooseYLabelScale(minVal, maxVal float64) yLabelScale {
 	return yLabelScale{0, ""}
 }
 
+// formatYLabel formats one Y-axis value using the chosen scale.
 func formatYLabel(v float64, scale yLabelScale) string {
 	if scale.divisor == 0 {
 		return fmt.Sprintf("%.*f", yLabelFormatPrecision, v)
@@ -131,6 +133,7 @@ func formatYLabel(v float64, scale yLabelScale) string {
 	return fmt.Sprintf("%.*f%s", yLabelFormatPrecision, v/scale.divisor, scale.suffix)
 }
 
+// yAxisLabelWidth returns the widest rendered Y-axis label width.
 func yAxisLabelWidth(values []float64, scale yLabelScale) int {
 	minVal, maxVal := minMax(values)
 	w := max(len(formatYLabel(minVal, scale)), len(formatYLabel(maxVal, scale)))
@@ -138,6 +141,7 @@ func yAxisLabelWidth(values []float64, scale yLabelScale) int {
 	return max(w, minYAxisLabelWidth)
 }
 
+// pickTimeFormat chooses an X-axis timestamp format based on total time span.
 func pickTimeFormat(first, last time.Time) string {
 	span := last.Sub(first)
 
@@ -151,6 +155,7 @@ func pickTimeFormat(first, last time.Time) string {
 	}
 }
 
+// minMax returns the minimum and maximum from a non-empty value slice.
 func minMax(vals []float64) (float64, float64) {
 	mn, mx := vals[0], vals[0]
 
@@ -167,6 +172,7 @@ func minMax(vals []float64) (float64, float64) {
 	return mn, mx
 }
 
+// humanNumber formats a number using human-friendly unit suffixes.
 func humanNumber(v float64) string {
 	abs := math.Abs(v)
 

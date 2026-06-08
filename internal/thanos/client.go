@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	rangeQueryTimeout  = 5 * time.Minute
-	labelQueryTimeout  = 30 * time.Second
+	rangeQueryTimeout = 5 * time.Minute
+	labelQueryTimeout = 30 * time.Second
 )
 
 type Client struct {
@@ -95,6 +95,7 @@ func (c *Client) RangeQuery(ctx context.Context, query string, start, end time.T
 	return series, nil
 }
 
+// matrixStreamToSeries converts one Prometheus matrix stream into Series data.
 func matrixStreamToSeries(stream *model.SampleStream) (Series, bool) {
 	times := make([]time.Time, 0, len(stream.Values))
 	values := make([]float64, 0, len(stream.Values))
@@ -120,6 +121,7 @@ func matrixStreamToSeries(stream *model.SampleStream) (Series, bool) {
 	}, true
 }
 
+// metricToLabels converts a Prometheus label map to plain Go strings.
 func metricToLabels(metric model.Metric) map[string]string {
 	labels := make(map[string]string, len(metric))
 	for k, v := range metric {

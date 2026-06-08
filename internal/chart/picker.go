@@ -11,6 +11,10 @@ import (
 const (
 	maxVisibleItems = 10
 	boxMinWidth     = 40
+	keyEscape       = 27
+	keyEnter        = 13
+	keyBackspace    = 127
+	keyCtrlC        = 3
 )
 
 type pickerState struct {
@@ -21,6 +25,7 @@ type pickerState struct {
 	scroll    int
 }
 
+// newPickerState initializes picker state with all series visible.
 func newPickerState(allLabels []string) *pickerState {
 	p := &pickerState{allLabels: allLabels}
 	p.refilter()
@@ -28,12 +33,14 @@ func newPickerState(allLabels []string) *pickerState {
 	return p
 }
 
+// refilter recomputes visible indices and resets cursor/scroll positions.
 func (p *pickerState) refilter() {
 	p.filtered = filterSeries(p.allLabels, p.input)
 	p.cursor = 0
 	p.scroll = 0
 }
 
+// cursorUp moves picker selection one item up.
 func (p *pickerState) cursorUp() {
 	if p.cursor > 0 {
 		p.cursor--
@@ -44,6 +51,7 @@ func (p *pickerState) cursorUp() {
 	}
 }
 
+// cursorDown moves picker selection one item down.
 func (p *pickerState) cursorDown() {
 	if p.cursor < len(p.filtered)-1 {
 		p.cursor++
@@ -54,11 +62,13 @@ func (p *pickerState) cursorDown() {
 	}
 }
 
+// addChar appends a typed character to the search query.
 func (p *pickerState) addChar(ch byte) {
 	p.input += string(ch)
 	p.refilter()
 }
 
+// backspace removes the last typed character from the search query.
 func (p *pickerState) backspace() {
 	if len(p.input) > 0 {
 		p.input = p.input[:len(p.input)-1]
@@ -66,6 +76,7 @@ func (p *pickerState) backspace() {
 	}
 }
 
+// selectedIndex returns the original series index under the cursor.
 func (p *pickerState) selectedIndex() int {
 	if p.cursor >= 0 && p.cursor < len(p.filtered) {
 		return p.filtered[p.cursor]
@@ -107,8 +118,8 @@ func runPicker(allLabels []string) (int, bool) {
 	renderPicker(state)
 
 	// Show cursor inside the picker input field
-	fmt.Print("\033[?25h")
-	defer fmt.Print("\033[?25l")
+	showTerminalCursor()
+	defer hideTerminalCursor()
 
 	buf := make([]byte, 3)
 
@@ -118,39 +129,55 @@ func runPicker(allLabels []string) (int, bool) {
 			return -1, false
 		}
 
-		if n == 1 {
-			switch {
-			case buf[0] == 27: // Escape
-				return -1, false
-			case buf[0] == 13: // Enter
-				idx := state.selectedIndex()
-				if idx >= 0 {
-					return idx, true
-				}
-
-				return -1, false
-			case buf[0] == 127: // Backspace
-				state.backspace()
-			case buf[0] == 3: // Ctrl+C
-				return -1, false
-			case buf[0] >= 32 && buf[0] < 127: // Printable ASCII
-				state.addChar(buf[0])
-			}
+		idx, done, selected := handlePickerSingleByteInput(state, n, buf)
+		if done {
+			return idx, selected
 		}
-
-		if n == 3 && buf[0] == 27 && buf[1] == 91 {
-			switch buf[2] {
-			case 'A': // Up
-				state.cursorUp()
-			case 'B': // Down
-				state.cursorDown()
-			}
-		}
+		handlePickerArrowInput(state, n, buf)
 
 		renderPicker(state)
 	}
 }
 
+// handlePickerSingleByteInput handles Enter/Escape/backspace and printable keys.
+func handlePickerSingleByteInput(state *pickerState, n int, buf []byte) (index int, done bool, selected bool) {
+	if n != 1 {
+		return -1, false, false
+	}
+
+	switch {
+	case buf[0] == keyEscape || buf[0] == keyCtrlC:
+		return -1, true, false
+	case buf[0] == keyEnter:
+		idx := state.selectedIndex()
+		if idx >= 0 {
+			return idx, true, true
+		}
+		return -1, true, false
+	case buf[0] == keyBackspace:
+		state.backspace()
+	case buf[0] >= 32 && buf[0] < keyBackspace:
+		state.addChar(buf[0])
+	}
+
+	return -1, false, false
+}
+
+// handlePickerArrowInput handles up/down arrow navigation for picker results.
+func handlePickerArrowInput(state *pickerState, n int, buf []byte) {
+	if n != 3 || buf[0] != keyEscape || buf[1] != 91 {
+		return
+	}
+
+	switch buf[2] {
+	case 'A':
+		state.cursorUp()
+	case 'B':
+		state.cursorDown()
+	}
+}
+
+// renderPicker draws the series picker overlay.
 func renderPicker(state *pickerState) {
 	termW, termH := config.TerminalSize()
 	startRow, startCol, boxW, boxH := pickerBoxLayout(termW, termH)
@@ -162,6 +189,7 @@ func renderPicker(state *pickerState) {
 	fmt.Print(sb.String())
 }
 
+// pickerBoxLayout calculates centered picker box geometry for the current terminal size.
 func pickerBoxLayout(termW, termH int) (startRow, startCol, boxW, boxH int) {
 	boxW = termW * 2 / 3
 	if boxW < boxMinWidth {
@@ -181,33 +209,36 @@ func pickerBoxLayout(termW, termH int) (startRow, startCol, boxW, boxH int) {
 	return startRow, startCol, boxW, boxH
 }
 
+// clearPickerOverlay clears the rectangle where the picker overlay is rendered.
 func clearPickerOverlay(sb *strings.Builder, startRow, startCol, boxW, boxH int) {
 	for r := startRow; r <= startRow+boxH; r++ {
-		fmt.Fprintf(sb, "\033[%d;%dH%-*s", r, startCol, boxW, "")
+		writeAt(sb, r, startCol, "%-*s", boxW, "")
 	}
 }
 
+// drawPickerContent renders picker borders, input, list area, and footer.
 func drawPickerContent(sb *strings.Builder, state *pickerState, startRow, startCol, boxW, innerW int) {
 	row := startRow
-	fmt.Fprintf(sb, "\033[%d;%dH\u250c%s\u2510", row, startCol, buildTopBorder(boxW-2, " Go to series "))
+	writeAt(sb, row, startCol, "\u250c%s\u2510", buildTopBorder(boxW-2, " Go to series "))
 	row++
 
 	searchLine := fmt.Sprintf("Search: %s", state.input)
-	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(searchLine, innerW))
+	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(searchLine, innerW))
 	row++
-	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
+	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, "")
 	row++
 
 	row = drawPickerItems(sb, state, row, startCol, innerW)
-	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
+	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, "")
 	row++
 
 	footer := fmt.Sprintf("%d of %d series | Enter select  Esc cancel", len(state.filtered), len(state.allLabels))
-	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(footer, innerW))
+	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(footer, innerW))
 	row++
-	fmt.Fprintf(sb, "\033[%d;%dH\u2514%s\u2518", row, startCol, strings.Repeat("\u2500", boxW-2))
+	writeAt(sb, row, startCol, "\u2514%s\u2518", strings.Repeat("\u2500", boxW-2))
 }
 
+// drawPickerItems renders the visible series rows and returns the next free row.
 func drawPickerItems(sb *strings.Builder, state *pickerState, row, startCol, innerW int) int {
 	endIdx := min(state.scroll+maxVisibleItems, len(state.filtered))
 	itemsShown := 0
@@ -218,13 +249,13 @@ func drawPickerItems(sb *strings.Builder, state *pickerState, row, startCol, inn
 		if i == state.cursor {
 			prefix = "> "
 		}
-		fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(prefix+label, innerW))
+		writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(prefix+label, innerW))
 		row++
 		itemsShown++
 	}
 
 	for itemsShown < maxVisibleItems {
-		fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
+		writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, "")
 		row++
 		itemsShown++
 	}
@@ -232,6 +263,7 @@ func drawPickerItems(sb *strings.Builder, state *pickerState, row, startCol, inn
 	return row
 }
 
+// buildTopBorder builds the titled top border for the picker box.
 func buildTopBorder(width int, title string) string {
 	if len(title) >= width {
 		return strings.Repeat("\u2500", width)
@@ -247,6 +279,7 @@ func buildTopBorder(width int, title string) string {
 	return strings.Repeat("\u2500", leftDashes) + title + strings.Repeat("\u2500", rightDashes)
 }
 
+// truncate shortens strings to fit a fixed-width terminal field.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

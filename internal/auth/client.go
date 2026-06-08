@@ -72,6 +72,7 @@ func FromKubeconfig(kubeconfigPath string, insecureTLS bool) (*Credentials, erro
 	}, nil
 }
 
+// discoverThanosURL resolves the Thanos route host from the OpenShift Route API.
 func discoverThanosURL(config *rest.Config) (string, error) {
 	transport, err := rest.TransportFor(config)
 	if err != nil {
@@ -111,6 +112,7 @@ func discoverThanosURL(config *rest.Config) (string, error) {
 	return route.Spec.Host, nil
 }
 
+// createSAToken issues a short-lived token for the monitoring service account.
 func createSAToken(clientset kubernetes.Interface) (string, error) {
 	expSeconds := int64(tokenDuration.Seconds())
 	tokenReq := &authv1.TokenRequest{
@@ -151,6 +153,7 @@ type tokenTransport struct {
 	base  http.RoundTripper
 }
 
+// RoundTrip clones a request and injects the bearer token header.
 func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
 	req2.Header.Set("Authorization", "Bearer "+t.token)

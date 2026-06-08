@@ -34,20 +34,24 @@ func NewInteractiveState(series []thanos.Series, query string) *InteractiveState
 	return s
 }
 
+// resetViewport expands the viewport to the full range of the current series.
 func (s *InteractiveState) resetViewport() {
 	cur := s.currentSeries()
 	s.ViewStart = 0
 	s.ViewEnd = len(cur.Values)
 }
 
+// currentSeries returns the series currently selected for display.
 func (s *InteractiveState) currentSeries() thanos.Series {
 	return s.AllSeries[s.SeriesIndex]
 }
 
+// viewLength returns the number of points currently visible in the viewport.
 func (s *InteractiveState) viewLength() int {
 	return s.ViewEnd - s.ViewStart
 }
 
+// panRight shifts the viewport to newer samples.
 func (s *InteractiveState) panRight() {
 	cur := s.currentSeries()
 	shift := max(1, s.viewLength()/10)
@@ -60,6 +64,7 @@ func (s *InteractiveState) panRight() {
 	s.ViewEnd += shift
 }
 
+// panLeft shifts the viewport to older samples.
 func (s *InteractiveState) panLeft() {
 	shift := max(1, s.viewLength()/10)
 
@@ -71,6 +76,7 @@ func (s *InteractiveState) panLeft() {
 	s.ViewEnd -= shift
 }
 
+// zoomIn narrows the viewport around its current center.
 func (s *InteractiveState) zoomIn() {
 	shrink := max(1, s.viewLength()/10)
 	if s.viewLength()-2*shrink < 5 {
@@ -81,6 +87,7 @@ func (s *InteractiveState) zoomIn() {
 	s.ViewEnd -= shrink
 }
 
+// zoomOut widens the viewport while staying inside data bounds.
 func (s *InteractiveState) zoomOut() {
 	cur := s.currentSeries()
 	grow := max(1, s.viewLength()/10)
@@ -96,6 +103,7 @@ func (s *InteractiveState) zoomOut() {
 	}
 }
 
+// nextSeries selects the next series if one exists.
 func (s *InteractiveState) nextSeries() {
 	if s.SeriesIndex < len(s.AllSeries)-1 {
 		s.SeriesIndex++
@@ -103,6 +111,7 @@ func (s *InteractiveState) nextSeries() {
 	}
 }
 
+// prevSeries selects the previous series if one exists.
 func (s *InteractiveState) prevSeries() {
 	if s.SeriesIndex > 0 {
 		s.SeriesIndex--
@@ -110,6 +119,7 @@ func (s *InteractiveState) prevSeries() {
 	}
 }
 
+// seriesLabels returns rendered label strings for all available series.
 func (s *InteractiveState) seriesLabels() []string {
 	labels := make([]string, len(s.AllSeries))
 	for i, series := range s.AllSeries {
@@ -131,10 +141,10 @@ func RunInteractive(series []thanos.Series, query string) error {
 	}
 	defer func() {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("\033[?25h")
+		showTerminalCursor()
 	}()
 
-	fmt.Print("\033[?25l")
+	hideTerminalCursor()
 
 	state := NewInteractiveState(series, query)
 	renderFrame(state)
@@ -157,6 +167,7 @@ func RunInteractive(series []thanos.Series, query string) error {
 	}
 }
 
+// handleInteractiveSingleByteInput handles one-byte key actions in interactive mode.
 func handleInteractiveSingleByteInput(state *InteractiveState, n int, buf []byte) (quit bool, handled bool) {
 	if n != 1 {
 		return false, false
@@ -180,6 +191,7 @@ func handleInteractiveSingleByteInput(state *InteractiveState, n int, buf []byte
 	return false, true
 }
 
+// handleInteractiveArrowInput handles ANSI arrow key sequences.
 func handleInteractiveArrowInput(state *InteractiveState, n int, buf []byte) {
 	if n != 3 || buf[0] != 27 || buf[1] != 91 {
 		return
@@ -197,6 +209,7 @@ func handleInteractiveArrowInput(state *InteractiveState, n int, buf []byte) {
 	}
 }
 
+// renderFrame renders one full-screen frame for interactive mode.
 func renderFrame(s *InteractiveState) {
 	termW, termH := config.TerminalSize()
 
@@ -209,10 +222,7 @@ func renderFrame(s *InteractiveState) {
 	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
 	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight, caption)
 
-	graph := strings.ReplaceAll(
-		asciigraph.Plot(viewVals, opts...),
-		"\n", "\r\n",
-	)
+	graph := toCRLF(asciigraph.Plot(viewVals, opts...))
 
 	labels := thanos.LabelSetString(cur.Labels)
 	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit",
@@ -225,11 +235,11 @@ func renderFrame(s *InteractiveState) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\033[2J\033[H")
+	clearScreenAndMoveHome(&sb)
 	sb.WriteString(graph)
 	sb.WriteString("\r\n")
-	fmt.Fprintf(&sb, "\033[%d;1H", termH)
-	fmt.Fprintf(&sb, "%-*s", termW, status)
+	moveCursor(&sb, termH, 1)
+	writePaddedLine(&sb, termW, status)
 
 	fmt.Print(sb.String())
 }
