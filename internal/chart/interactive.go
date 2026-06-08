@@ -147,39 +147,53 @@ func RunInteractive(series []thanos.Series, query string) error {
 			return nil
 		}
 
-		if n == 1 {
-			switch buf[0] {
-			case 'q', 'Q':
-				return nil
-			case 3: // Ctrl+C
-				return nil
-			case ' ':
-				state.nextSeries()
-			case 127: // Backspace
-				state.prevSeries()
-			case 'g', 'G':
-				idx, ok := runPicker(state.seriesLabels())
-				if ok {
-					state.SeriesIndex = idx
-					state.resetViewport()
-				}
-			}
-		}
-
-		if n == 3 && buf[0] == 27 && buf[1] == 91 {
-			switch buf[2] {
-			case 'C': // Right
-				state.panRight()
-			case 'D': // Left
-				state.panLeft()
-			case 'A': // Up = zoom in
-				state.zoomIn()
-			case 'B': // Down = zoom out
-				state.zoomOut()
-			}
+		if shouldQuit, handled := handleInteractiveSingleByteInput(state, n, buf); shouldQuit {
+			return nil
+		} else if !handled {
+			handleInteractiveArrowInput(state, n, buf)
 		}
 
 		renderFrame(state)
+	}
+}
+
+func handleInteractiveSingleByteInput(state *InteractiveState, n int, buf []byte) (quit bool, handled bool) {
+	if n != 1 {
+		return false, false
+	}
+
+	switch buf[0] {
+	case 'q', 'Q', 3:
+		return true, true
+	case ' ':
+		state.nextSeries()
+	case 127:
+		state.prevSeries()
+	case 'g', 'G':
+		idx, ok := runPicker(state.seriesLabels())
+		if ok {
+			state.SeriesIndex = idx
+			state.resetViewport()
+		}
+	}
+
+	return false, true
+}
+
+func handleInteractiveArrowInput(state *InteractiveState, n int, buf []byte) {
+	if n != 3 || buf[0] != 27 || buf[1] != 91 {
+		return
+	}
+
+	switch buf[2] {
+	case 'C':
+		state.panRight()
+	case 'D':
+		state.panLeft()
+	case 'A':
+		state.zoomIn()
+	case 'B':
+		state.zoomOut()
 	}
 }
 

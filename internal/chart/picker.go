@@ -153,101 +153,83 @@ func runPicker(allLabels []string) (int, bool) {
 
 func renderPicker(state *pickerState) {
 	termW, termH := config.TerminalSize()
+	startRow, startCol, boxW, boxH := pickerBoxLayout(termW, termH)
+	innerW := boxW - 4 // 2 for border + 1 padding each side
 
-	boxW := termW * 2 / 3
+	var sb strings.Builder
+	clearPickerOverlay(&sb, startRow, startCol, boxW, boxH)
+	drawPickerContent(&sb, state, startRow, startCol, boxW, innerW)
+	fmt.Print(sb.String())
+}
+
+func pickerBoxLayout(termW, termH int) (startRow, startCol, boxW, boxH int) {
+	boxW = termW * 2 / 3
 	if boxW < boxMinWidth {
 		boxW = boxMinWidth
 	}
-
 	if boxW > termW-4 {
 		boxW = termW - 4
 	}
 
-	innerW := boxW - 4 // 2 for border + 1 padding each side
-
-	// Fixed box height based on maxVisibleItems so it never changes size
-	boxH := maxVisibleItems + 7
+	boxH = maxVisibleItems + 7
 	if boxH > termH-2 {
 		boxH = termH - 2
 	}
 
-	startRow := (termH - boxH) / 2
-	startCol := (termW - boxW) / 2
+	startRow = max((termH-boxH)/2, 1)
+	startCol = max((termW-boxW)/2, 1)
+	return startRow, startCol, boxW, boxH
+}
 
-	if startRow < 1 {
-		startRow = 1
-	}
-
-	if startCol < 1 {
-		startCol = 1
-	}
-
-	var sb strings.Builder
-
-	// Clear the entire overlay region first to avoid ghosting
+func clearPickerOverlay(sb *strings.Builder, startRow, startCol, boxW, boxH int) {
 	for r := startRow; r <= startRow+boxH; r++ {
-		fmt.Fprintf(&sb, "\033[%d;%dH%-*s", r, startCol, boxW, "")
+		fmt.Fprintf(sb, "\033[%d;%dH%-*s", r, startCol, boxW, "")
 	}
+}
 
+func drawPickerContent(sb *strings.Builder, state *pickerState, startRow, startCol, boxW, innerW int) {
 	row := startRow
-
-	// Top border with title
-	title := " Go to series "
-	topLine := buildTopBorder(boxW-2, title)
-	fmt.Fprintf(&sb, "\033[%d;%dH\u250c%s\u2510", row, startCol, topLine)
+	fmt.Fprintf(sb, "\033[%d;%dH\u250c%s\u2510", row, startCol, buildTopBorder(boxW-2, " Go to series "))
 	row++
 
-	// Search input
 	searchLine := fmt.Sprintf("Search: %s", state.input)
-	fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(searchLine, innerW))
+	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(searchLine, innerW))
+	row++
+	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
 	row++
 
-	// Blank separator
-	fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
+	row = drawPickerItems(sb, state, row, startCol, innerW)
+	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
 	row++
 
-	// Filtered items
-	endIdx := state.scroll + maxVisibleItems
-	if endIdx > len(state.filtered) {
-		endIdx = len(state.filtered)
-	}
+	footer := fmt.Sprintf("%d of %d series | Enter select  Esc cancel", len(state.filtered), len(state.allLabels))
+	fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(footer, innerW))
+	row++
+	fmt.Fprintf(sb, "\033[%d;%dH\u2514%s\u2518", row, startCol, strings.Repeat("\u2500", boxW-2))
+}
 
+func drawPickerItems(sb *strings.Builder, state *pickerState, row, startCol, innerW int) int {
+	endIdx := min(state.scroll+maxVisibleItems, len(state.filtered))
 	itemsShown := 0
 
 	for i := state.scroll; i < endIdx; i++ {
 		label := state.allLabels[state.filtered[i]]
 		prefix := "  "
-
 		if i == state.cursor {
 			prefix = "> "
 		}
-
-		line := prefix + label
-		fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(line, innerW))
+		fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(prefix+label, innerW))
 		row++
 		itemsShown++
 	}
 
-	// Fill remaining item slots with blank lines
-	for itemsShown < maxVisibleItems && row < startRow+boxH-3 {
-		fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
+	for itemsShown < maxVisibleItems {
+		fmt.Fprintf(sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
 		row++
 		itemsShown++
 	}
 
-	// Blank separator
-	fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, "")
-	row++
-
-	// Footer
-	footer := fmt.Sprintf("%d of %d series | Enter select  Esc cancel", len(state.filtered), len(state.allLabels))
-	fmt.Fprintf(&sb, "\033[%d;%dH\u2502 %-*s \u2502", row, startCol, innerW, truncate(footer, innerW))
-	row++
-
-	// Bottom border
-	fmt.Fprintf(&sb, "\033[%d;%dH\u2514%s\u2518", row, startCol, strings.Repeat("\u2500", boxW-2))
-
-	fmt.Print(sb.String())
+	return row
 }
 
 func buildTopBorder(width int, title string) string {

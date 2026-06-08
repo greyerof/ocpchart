@@ -36,25 +36,40 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 	fmt.Print("\033[?25l")
 
+	state, lastRefresh, err := initLiveState(ctx, opts, oldState)
+	if err != nil {
+		return err
+	}
+
+	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	startLiveRefreshLoop(ctx, opts, &mu, state, &lastRefresh)
+
+	mu.Lock()
+	renderLiveFrame(state, lastRefresh, opts.Refresh)
+	mu.Unlock()
+
+	return runLiveInputLoop(&mu, state, &lastRefresh, opts.Refresh)
+}
+
+func initLiveState(ctx context.Context, opts LiveOptions, oldState *term.State) (*InteractiveState, time.Time, error) {
 	series, err := fetchLive(ctx, opts)
 	if err != nil {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		return fmt.Errorf("initial query failed: %w", err)
+		return nil, time.Time{}, fmt.Errorf("initial query failed: %w", err)
 	}
 
 	if len(series) == 0 {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		return fmt.Errorf("query returned no data")
+		return nil, time.Time{}, fmt.Errorf("query returned no data")
 	}
 
-	state := NewInteractiveState(series, opts.Query)
-	lastRefresh := time.Now()
+	return NewInteractiveState(series, opts.Query), time.Now(), nil
+}
 
-	var mu sync.Mutex
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
 	go func() {
 		ticker := time.NewTicker(opts.Refresh)
 		defer ticker.Stop()
@@ -64,31 +79,35 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				newSeries, fetchErr := fetchLive(ctx, opts)
-				if fetchErr != nil || len(newSeries) == 0 {
-					continue
-				}
-
-				mu.Lock()
-				prevIdx := state.SeriesIndex
-				state.AllSeries = newSeries
-
-				if prevIdx >= len(newSeries) {
-					state.SeriesIndex = 0
-				}
-
-				state.resetViewport()
-				lastRefresh = time.Now()
-				renderLiveFrame(state, lastRefresh, opts.Refresh)
-				mu.Unlock()
+				refreshLiveState(ctx, opts, mu, state, lastRefresh)
 			}
 		}
 	}()
+}
+
+func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
+	newSeries, fetchErr := fetchLive(ctx, opts)
+	if fetchErr != nil || len(newSeries) == 0 {
+		return
+	}
 
 	mu.Lock()
-	renderLiveFrame(state, lastRefresh, opts.Refresh)
+	updateLiveSeries(state, newSeries)
+	*lastRefresh = time.Now()
+	renderLiveFrame(state, *lastRefresh, opts.Refresh)
 	mu.Unlock()
+}
 
+func updateLiveSeries(state *InteractiveState, series []thanos.Series) {
+	prevIdx := state.SeriesIndex
+	state.AllSeries = series
+	if prevIdx >= len(series) {
+		state.SeriesIndex = 0
+	}
+	state.resetViewport()
+}
+
+func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time, refreshInterval time.Duration) error {
 	buf := make([]byte, 3)
 
 	for {
@@ -99,38 +118,14 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 		mu.Lock()
 
-		if n == 1 {
-			switch buf[0] {
-			case 'q', 'Q', 3:
-				mu.Unlock()
-				return nil
-			case ' ':
-				state.nextSeries()
-			case 127:
-				state.prevSeries()
-			case 'g', 'G':
-				idx, ok := runPicker(state.seriesLabels())
-				if ok {
-					state.SeriesIndex = idx
-					state.resetViewport()
-				}
-			}
+		if shouldQuit, handled := handleInteractiveSingleByteInput(state, n, buf); shouldQuit {
+			mu.Unlock()
+			return nil
+		} else if !handled {
+			handleInteractiveArrowInput(state, n, buf)
 		}
 
-		if n == 3 && buf[0] == 27 && buf[1] == 91 {
-			switch buf[2] {
-			case 'C':
-				state.panRight()
-			case 'D':
-				state.panLeft()
-			case 'A':
-				state.zoomIn()
-			case 'B':
-				state.zoomOut()
-			}
-		}
-
-		renderLiveFrame(state, lastRefresh, opts.Refresh)
+		renderLiveFrame(state, *lastRefresh, refreshInterval)
 		mu.Unlock()
 	}
 }
@@ -145,35 +140,8 @@ func fetchLive(ctx context.Context, opts LiveOptions) ([]thanos.Series, error) {
 func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) {
 	termW, termH := config.TerminalSize()
 
-	// Reserve 2 rows: status + controls
-	chartHeight := termH - 2
-
-	cur := s.currentSeries()
-	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
-	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
-
-	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
-	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight, caption)
-
-	graph := strings.ReplaceAll(
-		asciigraph.Plot(viewVals, opts...),
-		"\n", "\r\n",
-	)
-
-	labels := thanos.LabelSetString(cur.Labels)
-	nextRefresh := lastRefresh.Add(refreshInterval)
-	untilRefresh := time.Until(nextRefresh).Truncate(time.Second)
-
-	if untilRefresh < 0 {
-		untilRefresh = 0
-	}
-
-	status := fmt.Sprintf("  LIVE (refresh %s, next in %s) | Series %d/%d %s | Samples %d-%d of %d",
-		refreshInterval, untilRefresh,
-		s.SeriesIndex+1, len(s.AllSeries), labels,
-		s.ViewStart+1, s.ViewEnd, len(cur.Values),
-	)
-
+	graph := liveGraph(s, termW, termH)
+	status := liveStatusLine(s, lastRefresh, refreshInterval)
 	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit"
 
 	if len(status) > termW {
@@ -190,4 +158,29 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 	fmt.Fprintf(&sb, "%-*s", termW, controls)
 
 	fmt.Print(sb.String())
+}
+
+func liveGraph(s *InteractiveState, termW, termH int) string {
+	cur := s.currentSeries()
+	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
+	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
+	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
+
+	opts := buildChartOptions(viewVals, viewTimes, termW, termH-2, caption)
+	return strings.ReplaceAll(asciigraph.Plot(viewVals, opts...), "\n", "\r\n")
+}
+
+func liveStatusLine(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) string {
+	cur := s.currentSeries()
+	labels := thanos.LabelSetString(cur.Labels)
+	untilRefresh := time.Until(lastRefresh.Add(refreshInterval)).Truncate(time.Second)
+	if untilRefresh < 0 {
+		untilRefresh = 0
+	}
+
+	return fmt.Sprintf("  LIVE (refresh %s, next in %s) | Series %d/%d %s | Samples %d-%d of %d",
+		refreshInterval, untilRefresh,
+		s.SeriesIndex+1, len(s.AllSeries), labels,
+		s.ViewStart+1, s.ViewEnd, len(cur.Values),
+	)
 }
