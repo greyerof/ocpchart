@@ -125,3 +125,60 @@ Live mode is always interactive (full-screen).
 ## License
 
 Apache License 2.0
+
+## Annex: Internals
+
+### Thanos route discovery path
+
+When using kubeconfig auth mode, `ocpchart` does not hardcode a cluster-specific hostname.
+It calls the OpenShift Route API and reads:
+
+- `GET /apis/route.openshift.io/v1/namespaces/openshift-monitoring/routes/thanos-querier`
+
+The response field `spec.host` is used to build the final endpoint as:
+
+- `https://<spec.host>`
+
+That URL is then passed to the Prometheus v1 API client for all metric and range queries.
+
+### Service account token creation
+
+`ocpchart` requests a token from Kubernetes via the TokenRequest API for:
+
+- namespace: `openshift-monitoring`
+- service account: `prometheus-k8s`
+
+The token is intentionally short-lived (`10m`) so leaked credentials have a smaller blast radius and users naturally re-auth with fresh credentials on subsequent command runs.
+
+In practice this means:
+
+- each command run in kubeconfig mode gets a fresh bearer token
+- long-lived static secrets are avoided by default
+- manual mode (`--token` + `--thanos-url`) remains available when token lifecycle is managed externally
+
+### Why short expiration matters in this tool
+
+`ocpchart` is a CLI meant for ad-hoc, terminal-driven observability sessions. A short expiry fits this workflow because:
+
+- sessions are usually brief (query or live window while debugging)
+- token reuse across unrelated sessions is discouraged
+- accidental token exposure in shell history or logs has limited lifetime impact
+
+### Query timing behavior
+
+Some timing internals worth knowing:
+
+- `--until` accepts either a Go duration (interpreted as `now - duration`) or an RFC3339 timestamp
+- omitted `--until` defaults to `now`
+- range query timeout is 5 minutes
+- metric name discovery timeout is 30 seconds
+
+### Step auto-calculation heuristics
+
+If `--step` is omitted:
+
+- `ocpchart` estimates a datapoint count from terminal width (`width - 10`)
+- clamps the minimum number of points to 20
+- clamps minimum step to `15s`
+
+This keeps charts readable on narrow terminals while avoiding very high-frequency queries by default.
