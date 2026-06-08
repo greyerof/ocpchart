@@ -21,6 +21,7 @@ const (
 	serviceAccountName  = "prometheus-k8s"
 	thanosRoutePath     = "/apis/route.openshift.io/v1/namespaces/openshift-monitoring/routes/thanos-querier"
 	tokenDuration       = 10 * time.Minute
+	routeRequestTimeout = 30 * time.Second
 )
 
 type Credentials struct {
@@ -77,7 +78,10 @@ func discoverThanosURL(config *rest.Config) (string, error) {
 		return "", fmt.Errorf("creating transport: %w", err)
 	}
 
-	client := &http.Client{Transport: transport}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   routeRequestTimeout,
+	}
 	url := config.Host + thanosRoutePath
 
 	resp, err := client.Get(url)

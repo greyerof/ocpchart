@@ -3,7 +3,9 @@ package thanos
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/greyerof/ocpchart/internal/auth"
@@ -95,7 +97,7 @@ func (c *Client) RangeQuery(ctx context.Context, query string, start, end time.T
 
 		for _, sp := range stream.Values {
 			v := float64(sp.Value)
-			if v != v { // NaN check
+			if math.IsNaN(v) {
 				continue
 			}
 
@@ -136,14 +138,5 @@ func LabelSetString(labels map[string]string) string {
 		return "{}"
 	}
 
-	result := "{"
-	for i, p := range pairs {
-		if i > 0 {
-			result += ", "
-		}
-		result += p
-	}
-	result += "}"
-
-	return result
+	return "{" + strings.Join(pairs, ", ") + "}"
 }
