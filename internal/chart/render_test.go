@@ -169,7 +169,7 @@ func TestRenderStatic_ProducesOutput(t *testing.T) {
 		Values: makeSineValues(60),
 	}
 
-	result := RenderStatic(s, 80, 25)
+	result := RenderStatic(s, 80, 25, "test_query")
 	if result == "" {
 		t.Fatal("expected non-empty chart output")
 	}
@@ -188,7 +188,7 @@ func TestRenderStatic_ContainsXAxisTimestamps(t *testing.T) {
 		Values: makeSineValues(60),
 	}
 
-	result := RenderStatic(s, 80, 25)
+	result := RenderStatic(s, 80, 25, "test_query")
 	// The X-axis should contain the hour from the start time formatted in local timezone
 	hourStr := now.Format("15:")
 	if !strings.Contains(result, hourStr) {
@@ -204,8 +204,8 @@ func TestRenderStatic_RespectsWidthHeight(t *testing.T) {
 		Values: makeSineValues(30),
 	}
 
-	narrow := RenderStatic(s, 80, 15)
-	wide := RenderStatic(s, 120, 30)
+	narrow := RenderStatic(s, 80, 15, "test_query")
+	wide := RenderStatic(s, 120, 30, "test_query")
 
 	narrowLines := strings.Split(narrow, "\n")
 	wideLines := strings.Split(wide, "\n")

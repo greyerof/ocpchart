@@ -165,13 +165,8 @@ func renderPicker(state *pickerState) {
 
 	innerW := boxW - 4 // 2 for border + 1 padding each side
 
-	visible := len(state.filtered)
-	if visible > maxVisibleItems {
-		visible = maxVisibleItems
-	}
-
-	// Box height: title(1) + search(1) + blank(1) + items(visible) + blank(1) + footer(1) + borders(2)
-	boxH := visible + 7
+	// Fixed box height based on maxVisibleItems so it never changes size
+	boxH := maxVisibleItems + 7
 	if boxH > termH-2 {
 		boxH = termH - 2
 	}
@@ -188,6 +183,11 @@ func renderPicker(state *pickerState) {
 	}
 
 	var sb strings.Builder
+
+	// Clear the entire overlay region first to avoid ghosting
+	for r := startRow; r <= startRow+boxH; r++ {
+		fmt.Fprintf(&sb, "\033[%d;%dH%-*s", r, startCol, boxW, "")
+	}
 
 	row := startRow
 

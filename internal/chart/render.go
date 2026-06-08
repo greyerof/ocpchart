@@ -15,8 +15,8 @@ const (
 	minXAxisTickCount     = 2
 	yAxisDefaultOffset    = 3
 	minYAxisLabelWidth    = 4
-	// extraRows: X-axis separator (1) + X-axis labels (1) + caption (1) + blank (1)
-	extraRows             = 4
+	// extraRows: X-axis separator (1) + X-axis labels (1) + caption (2) + blank (1)
+	extraRows             = 5
 	yLabelFormatThreshold = 10000
 	yLabelFormatPrecision = 3
 )
@@ -34,7 +34,7 @@ var yLabelScales = []yLabelScale{
 }
 
 // RenderStatic renders a single series as an ASCII chart and returns the string.
-func RenderStatic(s thanos.Series, widthOverride, heightOverride int) string {
+func RenderStatic(s thanos.Series, widthOverride, heightOverride int, query string) string {
 	width := widthOverride
 	if width <= 0 {
 		width = config.TerminalWidth()
@@ -45,14 +45,14 @@ func RenderStatic(s thanos.Series, widthOverride, heightOverride int) string {
 		height = config.DefaultHeight
 	}
 
-	caption := thanos.LabelSetString(s.Labels)
+	caption := query + "\n" + thanos.LabelSetString(s.Labels)
 	opts := buildChartOptions(s.Values, s.Times, width, height, caption)
 
 	return asciigraph.Plot(s.Values, opts...)
 }
 
 // PrintStatic prints a single series chart to stdout with a header.
-func PrintStatic(s thanos.Series, widthOverride, heightOverride int) {
+func PrintStatic(s thanos.Series, widthOverride, heightOverride int, query string) {
 	labels := thanos.LabelSetString(s.Labels)
 	fmt.Printf("Series: %s\n", labels)
 	fmt.Printf("Points: %d | Range: %s to %s\n\n",
@@ -60,7 +60,7 @@ func PrintStatic(s thanos.Series, widthOverride, heightOverride int) {
 		s.Times[0].Format("2006-01-02 15:04:05"),
 		s.Times[len(s.Times)-1].Format("2006-01-02 15:04:05"),
 	)
-	fmt.Println(RenderStatic(s, widthOverride, heightOverride))
+	fmt.Println(RenderStatic(s, widthOverride, heightOverride, query))
 	fmt.Println()
 }
 

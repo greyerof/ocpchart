@@ -96,7 +96,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	chart.PrintStatic(selected, flagQueryWidth, flagQueryHeight)
+	chart.PrintStatic(selected, flagQueryWidth, flagQueryHeight, promql)
 
 	return nil
 }
