@@ -1,7 +1,6 @@
-BINARY   := ocpchart
 GOMOD    := github.com/greyerof/ocpchart
-CMD      := ./cmd/ocpchart
-BIN_DIR  := bin
+CMD      := ./ocpchart
+APP_MAIN := ./cmd/ocpchart
 
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -11,7 +10,7 @@ LDFLAGS  := -X '$(GOMOD)/internal/commands.version=$(VERSION)' \
 .PHONY: build lint test clean
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(CMD)
+	go build -ldflags "$(LDFLAGS)" -o $(CMD) $(APP_MAIN)
 
 lint:
 	golangci-lint run ./...
@@ -20,4 +19,4 @@ test:
 	go test ./... -v
 
 clean:
-	rm -rf $(BIN_DIR)
+	rm -f $(CMD)

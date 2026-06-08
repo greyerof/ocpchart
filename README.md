@@ -28,7 +28,7 @@ go install github.com/greyerof/ocpchart/cmd/ocpchart@latest
 git clone https://github.com/greyerof/ocpchart.git
 cd ocpchart
 make build
-# binary at bin/ocpchart
+# binary at ./ocpchart
 ```
 
 ## Quick start
