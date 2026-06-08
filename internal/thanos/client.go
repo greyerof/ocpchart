@@ -85,38 +85,48 @@ func (c *Client) RangeQuery(ctx context.Context, query string, start, end time.T
 	}
 
 	series := make([]Series, 0, len(matrix))
-
 	for _, stream := range matrix {
-		labels := make(map[string]string, len(stream.Metric))
-		for k, v := range stream.Metric {
-			labels[string(k)] = string(v)
+		s, ok := matrixStreamToSeries(stream)
+		if ok {
+			series = append(series, s)
 		}
-
-		times := make([]time.Time, 0, len(stream.Values))
-		values := make([]float64, 0, len(stream.Values))
-
-		for _, sp := range stream.Values {
-			v := float64(sp.Value)
-			if math.IsNaN(v) {
-				continue
-			}
-
-			times = append(times, sp.Timestamp.Time())
-			values = append(values, v)
-		}
-
-		if len(values) == 0 {
-			continue
-		}
-
-		series = append(series, Series{
-			Labels: labels,
-			Times:  times,
-			Values: values,
-		})
 	}
 
 	return series, nil
+}
+
+func matrixStreamToSeries(stream *model.SampleStream) (Series, bool) {
+	times := make([]time.Time, 0, len(stream.Values))
+	values := make([]float64, 0, len(stream.Values))
+
+	for _, sp := range stream.Values {
+		v := float64(sp.Value)
+		if math.IsNaN(v) {
+			continue
+		}
+
+		times = append(times, sp.Timestamp.Time())
+		values = append(values, v)
+	}
+
+	if len(values) == 0 {
+		return Series{}, false
+	}
+
+	return Series{
+		Labels: metricToLabels(stream.Metric),
+		Times:  times,
+		Values: values,
+	}, true
+}
+
+func metricToLabels(metric model.Metric) map[string]string {
+	labels := make(map[string]string, len(metric))
+	for k, v := range metric {
+		labels[string(k)] = string(v)
+	}
+
+	return labels
 }
 
 // LabelSetString returns a compact {k="v", ...} representation of a label set,

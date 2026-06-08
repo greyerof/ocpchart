@@ -59,19 +59,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	end := time.Now()
-	if flagQueryUntil != "" {
-		end, err = parseUntil(flagQueryUntil)
-		if err != nil {
-			return fmt.Errorf("invalid --until: %w", err)
-		}
-	}
-
-	start := end.Add(-flagQuerySince)
-
-	step := flagQueryStep
-	if step == 0 {
-		step = config.AutoStep(flagQuerySince, flagQueryWidth)
+	start, end, step, err := buildQueryWindow()
+	if err != nil {
+		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "Querying: %s\n", promql)
@@ -99,6 +89,25 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	chart.PrintStatic(selected, flagQueryWidth, flagQueryHeight, promql)
 
 	return nil
+}
+
+func buildQueryWindow() (time.Time, time.Time, time.Duration, error) {
+	end := time.Now()
+	if flagQueryUntil != "" {
+		parsed, err := parseUntil(flagQueryUntil)
+		if err != nil {
+			return time.Time{}, time.Time{}, 0, fmt.Errorf("invalid --until: %w", err)
+		}
+		end = parsed
+	}
+
+	step := flagQueryStep
+	if step == 0 {
+		step = config.AutoStep(flagQuerySince, flagQueryWidth)
+	}
+
+	start := end.Add(-flagQuerySince)
+	return start, end, step, nil
 }
 
 func selectSeries(series []thanos.Series) (thanos.Series, error) {
