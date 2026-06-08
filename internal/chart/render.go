@@ -45,7 +45,8 @@ func RenderStatic(s thanos.Series, widthOverride, heightOverride int) string {
 		height = config.DefaultHeight
 	}
 
-	opts := buildChartOptions(s.Values, s.Times, width, height)
+	caption := thanos.LabelSetString(s.Labels)
+	opts := buildChartOptions(s.Values, s.Times, width, height, caption)
 
 	return asciigraph.Plot(s.Values, opts...)
 }
@@ -65,7 +66,7 @@ func PrintStatic(s thanos.Series, widthOverride, heightOverride int) {
 
 // buildChartOptions computes plot dimensions and returns asciigraph options
 // with proper X-axis timestamps and Y-axis formatting.
-func buildChartOptions(values []float64, times []time.Time, totalWidth, totalHeight int) []asciigraph.Option {
+func buildChartOptions(values []float64, times []time.Time, totalWidth, totalHeight int, caption string) []asciigraph.Option {
 	first := times[0]
 	last := times[len(times)-1]
 
@@ -95,7 +96,7 @@ func buildChartOptions(values []float64, times []time.Time, totalWidth, totalHei
 	return []asciigraph.Option{
 		asciigraph.Height(plotHeight),
 		asciigraph.Width(plotWidth),
-		asciigraph.Caption(thanos.LabelSetString(nil)),
+		asciigraph.Caption(caption),
 		asciigraph.XAxisRange(firstUnix, lastUnix),
 		asciigraph.XAxisTickCount(tickCount),
 		asciigraph.XAxisValueFormatter(func(v float64) string {

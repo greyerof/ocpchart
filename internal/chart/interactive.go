@@ -192,7 +192,8 @@ func renderFrame(s *InteractiveState) {
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
 	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
 
-	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight)
+	caption := thanos.LabelSetString(cur.Labels)
+	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight, caption)
 
 	graph := strings.ReplaceAll(
 		asciigraph.Plot(viewVals, opts...),
