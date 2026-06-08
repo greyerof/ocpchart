@@ -108,6 +108,12 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 				state.nextSeries()
 			case 127:
 				state.prevSeries()
+			case 'g', 'G':
+				idx, ok := runPicker(state.seriesLabels())
+				if ok {
+					state.SeriesIndex = idx
+					state.resetViewport()
+				}
 			}
 		}
 
@@ -167,7 +173,7 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
 
-	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  q quit"
+	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit"
 
 	if len(status) > termW {
 		status = status[:termW]

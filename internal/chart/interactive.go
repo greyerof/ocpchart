@@ -110,6 +110,15 @@ func (s *InteractiveState) prevSeries() {
 	}
 }
 
+func (s *InteractiveState) seriesLabels() []string {
+	labels := make([]string, len(s.AllSeries))
+	for i, series := range s.AllSeries {
+		labels[i] = thanos.LabelSetString(series.Labels)
+	}
+
+	return labels
+}
+
 // RunInteractive enters a full-screen raw terminal loop for chart interaction.
 func RunInteractive(series []thanos.Series, query string) error {
 	if len(series) == 0 {
@@ -148,6 +157,12 @@ func RunInteractive(series []thanos.Series, query string) error {
 				state.nextSeries()
 			case 127: // Backspace
 				state.prevSeries()
+			case 'g', 'G':
+				idx, ok := runPicker(state.seriesLabels())
+				if ok {
+					state.SeriesIndex = idx
+					state.resetViewport()
+				}
 			}
 		}
 
@@ -185,7 +200,7 @@ func renderFrame(s *InteractiveState) {
 	)
 
 	labels := thanos.LabelSetString(cur.Labels)
-	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  q quit",
+	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit",
 		s.SeriesIndex+1, len(s.AllSeries), labels,
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
