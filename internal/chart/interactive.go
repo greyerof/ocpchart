@@ -193,6 +193,7 @@ func handleInteractiveSingleByteInput(state *InteractiveState, n int, buf []byte
 
 // handleInteractiveArrowInput handles ANSI arrow key sequences.
 func handleInteractiveArrowInput(state *InteractiveState, n int, buf []byte) {
+	// Arrow keys arrive as a 3-byte ANSI escape sequence: ESC [ <code>.
 	if n != 3 || buf[0] != 27 || buf[1] != 91 {
 		return
 	}

@@ -41,6 +41,8 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 		return err
 	}
 
+	// The refresh goroutine and input loop both mutate/read `state` and `lastRefresh`.
+	// This mutex keeps those operations serialized so we render consistent frames.
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -90,6 +92,7 @@ func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex,
 // refreshLiveState fetches fresh data and redraws the frame when data is valid.
 func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
 	newSeries, fetchErr := fetchLive(ctx, opts)
+	// Keep the current frame if refresh fails; next ticks will retry automatically.
 	if fetchErr != nil || len(newSeries) == 0 {
 		return
 	}
@@ -118,6 +121,7 @@ func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time
 	for {
 		n, readErr := os.Stdin.Read(buf)
 		if readErr != nil {
+			// Treat stdin closure/read failures as a graceful exit from live mode.
 			return nil
 		}
 

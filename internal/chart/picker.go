@@ -165,6 +165,7 @@ func handlePickerSingleByteInput(state *pickerState, n int, buf []byte) (index i
 
 // handlePickerArrowInput handles up/down arrow navigation for picker results.
 func handlePickerArrowInput(state *pickerState, n int, buf []byte) {
+	// Arrow keys arrive as a 3-byte ANSI escape sequence: ESC [ <code>.
 	if n != 3 || buf[0] != keyEscape || buf[1] != 91 {
 		return
 	}
