@@ -10,7 +10,8 @@ import (
 
 const (
 	MinStep        = 15 * time.Second
-	DefaultHeight  = 20
+	DefaultWidth   = 80
+	DefaultHeight  = 25
 	DefaultRefresh = 30 * time.Second
 )
 
@@ -59,22 +60,48 @@ func AutoStep(since time.Duration, widthOverride int) time.Duration {
 	return step
 }
 
-// TerminalWidth returns the current terminal width, or 80 as a fallback.
+// TerminalWidth returns the current terminal width, or DefaultWidth as a fallback.
 func TerminalWidth() int {
-	w, _, err := term.GetSize(int(os.Stdout.Fd()))
+	fd := int(os.Stdout.Fd())
+	if !term.IsTerminal(fd) {
+		return DefaultWidth
+	}
+
+	w, _, err := term.GetSize(fd)
 	if err != nil || w <= 0 {
-		return 80
+		return DefaultWidth
 	}
 
 	return w
 }
 
-// TerminalHeight returns the current terminal height, or 24 as a fallback.
+// TerminalHeight returns the current terminal height, or DefaultHeight as a fallback.
 func TerminalHeight() int {
-	_, h, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || h <= 0 {
-		return 24
+	fd := int(os.Stdout.Fd())
+	if !term.IsTerminal(fd) {
+		return DefaultHeight
 	}
 
-	return h
+	_, h, err := term.GetSize(fd)
+	if err != nil || h <= 0 {
+		return DefaultHeight
+	}
+
+	return max(h, DefaultHeight)
+}
+
+// TerminalSize returns both width and height in one call, with proper
+// fallbacks. Used by interactive/live modes that need both dimensions.
+func TerminalSize() (int, int) {
+	fd := int(os.Stdout.Fd())
+	if !term.IsTerminal(fd) {
+		return DefaultWidth, DefaultHeight
+	}
+
+	w, h, err := term.GetSize(fd)
+	if err != nil || w <= 0 || h <= 0 {
+		return DefaultWidth, DefaultHeight
+	}
+
+	return w, max(h, DefaultHeight)
 }

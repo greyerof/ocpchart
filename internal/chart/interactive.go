@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/greyerof/ocpchart/internal/config"
 	"github.com/greyerof/ocpchart/internal/thanos"
@@ -12,13 +11,15 @@ import (
 	"golang.org/x/term"
 )
 
+const statusBarRows = 1
+
 // InteractiveState holds the mutable state for interactive chart navigation.
 type InteractiveState struct {
-	AllSeries    []thanos.Series
-	SeriesIndex  int
-	ViewStart    int
-	ViewEnd      int
-	Query        string
+	AllSeries   []thanos.Series
+	SeriesIndex int
+	ViewStart   int
+	ViewEnd     int
+	Query       string
 }
 
 // NewInteractiveState creates an initial state for the given series.
@@ -121,10 +122,10 @@ func RunInteractive(series []thanos.Series, query string) error {
 	}
 	defer func() {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("\033[?25h") // show cursor
+		fmt.Print("\033[?25h")
 	}()
 
-	fmt.Print("\033[?25l") // hide cursor
+	fmt.Print("\033[?25l")
 
 	state := NewInteractiveState(series, query)
 	renderFrame(state)
@@ -168,33 +169,23 @@ func RunInteractive(series []thanos.Series, query string) error {
 }
 
 func renderFrame(s *InteractiveState) {
-	termW := config.TerminalWidth()
-	termH := config.TerminalHeight()
+	termW, termH := config.TerminalSize()
 
-	chartHeight := termH - 6 // room for header + status bar
-	if chartHeight < 5 {
-		chartHeight = 5
-	}
+	chartHeight := termH - statusBarRows
 
 	cur := s.currentSeries()
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
 	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
 
-	opts := []asciigraph.Option{
-		asciigraph.Height(chartHeight),
-		asciigraph.Width(termW - 15),
-	}
+	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight)
 
-	if len(viewTimes) > 0 {
-		caption := formatViewCaption(viewTimes, viewVals)
-		opts = append(opts, asciigraph.Caption(caption))
-	}
+	graph := strings.ReplaceAll(
+		asciigraph.Plot(viewVals, opts...),
+		"\n", "\r\n",
+	)
 
-	chart := asciigraph.Plot(viewVals, opts...)
-
-	// Build status bar
 	labels := thanos.LabelSetString(cur.Labels)
-	status := fmt.Sprintf("Series %d/%d %s | Samples %d-%d of %d | ←/→ pan  ↑/↓ zoom  Space/Bksp series  q quit",
+	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  q quit",
 		s.SeriesIndex+1, len(s.AllSeries), labels,
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
@@ -203,31 +194,12 @@ func renderFrame(s *InteractiveState) {
 		status = status[:termW]
 	}
 
-	// Clear screen and draw
 	var sb strings.Builder
-	sb.WriteString("\033[2J\033[H") // clear + home
-	fmt.Fprintf(&sb, "Query: %s\n", s.Query)
-	sb.WriteString(chart)
-	sb.WriteString("\n\n")
-	sb.WriteString(status)
+	sb.WriteString("\033[2J\033[H")
+	sb.WriteString(graph)
+	sb.WriteString("\r\n")
+	fmt.Fprintf(&sb, "\033[%d;1H", termH)
+	fmt.Fprintf(&sb, "%-*s", termW, status)
 
 	fmt.Print(sb.String())
-}
-
-func formatViewCaption(times []time.Time, values []float64) string {
-	if len(times) == 0 {
-		return ""
-	}
-
-	start := times[0]
-	end := times[len(times)-1]
-
-	minVal, maxVal := minMax(values)
-
-	return fmt.Sprintf("%s .. %s | min: %s  max: %s",
-		start.Format("15:04:05"),
-		end.Format("15:04:05"),
-		humanNumber(minVal),
-		humanNumber(maxVal),
-	)
 }

@@ -59,87 +59,105 @@ func TestHumanNumber_Negative(t *testing.T) {
 }
 
 func TestMinMax(t *testing.T) {
-	min, max := minMax([]float64{3, 1, 4, 1, 5, 9, 2, 6})
-	if min != 1 {
-		t.Fatalf("expected min 1, got %f", min)
+	mn, mx := minMax([]float64{3, 1, 4, 1, 5, 9, 2, 6})
+	if mn != 1 {
+		t.Fatalf("expected min 1, got %f", mn)
 	}
 
-	if max != 9 {
-		t.Fatalf("expected max 9, got %f", max)
+	if mx != 9 {
+		t.Fatalf("expected max 9, got %f", mx)
 	}
 }
 
 func TestMinMax_SingleValue(t *testing.T) {
-	min, max := minMax([]float64{42})
-	if min != 42 || max != 42 {
-		t.Fatalf("expected 42/42, got %f/%f", min, max)
+	mn, mx := minMax([]float64{42})
+	if mn != 42 || mx != 42 {
+		t.Fatalf("expected 42/42, got %f/%f", mn, mx)
 	}
 }
 
 func TestMinMax_NegativeValues(t *testing.T) {
-	min, max := minMax([]float64{-5, -1, -10})
-	if min != -10 {
-		t.Fatalf("expected min -10, got %f", min)
+	mn, mx := minMax([]float64{-5, -1, -10})
+	if mn != -10 {
+		t.Fatalf("expected min -10, got %f", mn)
 	}
 
-	if max != -1 {
-		t.Fatalf("expected max -1, got %f", max)
-	}
-}
-
-func TestFormatCaption_Empty(t *testing.T) {
-	s := thanos.Series{}
-	if got := formatCaption(s); got != "" {
-		t.Fatalf("expected empty caption, got %q", got)
+	if mx != -1 {
+		t.Fatalf("expected max -1, got %f", mx)
 	}
 }
 
-func TestFormatCaption_ShortDuration(t *testing.T) {
+func TestPickTimeFormat_ShortDuration(t *testing.T) {
 	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	s := thanos.Series{
-		Times:  []time.Time{now, now.Add(30 * time.Minute)},
-		Values: []float64{1.0, 2.0},
-	}
-	got := formatCaption(s)
-	if !strings.Contains(got, "10:00:00") || !strings.Contains(got, "10:30:00") {
-		t.Fatalf("expected HH:MM:SS format for short durations, got %q", got)
+	got := pickTimeFormat(now, now.Add(30*time.Minute))
+	if got != "15:04:05" {
+		t.Fatalf("expected 15:04:05, got %s", got)
 	}
 }
 
-func TestFormatCaption_MediumDuration(t *testing.T) {
+func TestPickTimeFormat_MediumDuration(t *testing.T) {
 	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	s := thanos.Series{
-		Times:  []time.Time{now, now.Add(2 * time.Hour)},
-		Values: []float64{1.0, 2.0},
-	}
-	got := formatCaption(s)
-	if !strings.Contains(got, "10:00") {
-		t.Fatalf("expected HH:MM format for medium durations, got %q", got)
+	got := pickTimeFormat(now, now.Add(2*time.Hour))
+	if got != "15:04" {
+		t.Fatalf("expected 15:04, got %s", got)
 	}
 }
 
-func TestFormatCaption_LongDuration(t *testing.T) {
+func TestPickTimeFormat_LongDuration(t *testing.T) {
 	start := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC)
-	s := thanos.Series{
-		Times:  []time.Time{start, end},
-		Values: []float64{1.0, 2.0},
-	}
-	got := formatCaption(s)
-	if !strings.Contains(got, "Jan 01") {
-		t.Fatalf("expected Mon DD HH:MM format for long durations, got %q", got)
+	got := pickTimeFormat(start, end)
+	if got != "Jan 02 15:04" {
+		t.Fatalf("expected 'Jan 02 15:04', got %s", got)
 	}
 }
 
-func TestFormatCaption_IncludesMinMax(t *testing.T) {
-	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	s := thanos.Series{
-		Times:  []time.Time{now, now.Add(10 * time.Minute)},
-		Values: []float64{100.0, 200.0},
+func TestChooseYLabelScale_NoScaling(t *testing.T) {
+	scale := chooseYLabelScale(0, 100)
+	if scale.divisor != 0 {
+		t.Fatalf("expected no scaling for small values, got divisor %f", scale.divisor)
 	}
-	got := formatCaption(s)
-	if !strings.Contains(got, "min: 100.00") || !strings.Contains(got, "max: 200.00") {
-		t.Fatalf("expected min/max in caption, got %q", got)
+}
+
+func TestChooseYLabelScale_Kilo(t *testing.T) {
+	scale := chooseYLabelScale(0, 50000)
+	if scale.suffix != "K" {
+		t.Fatalf("expected K suffix, got %q", scale.suffix)
+	}
+}
+
+func TestChooseYLabelScale_Mega(t *testing.T) {
+	scale := chooseYLabelScale(0, 5e6)
+	if scale.suffix != "M" {
+		t.Fatalf("expected M suffix, got %q", scale.suffix)
+	}
+}
+
+func TestChooseYLabelScale_Giga(t *testing.T) {
+	scale := chooseYLabelScale(0, 5e9)
+	if scale.suffix != "G" {
+		t.Fatalf("expected G suffix, got %q", scale.suffix)
+	}
+}
+
+func TestChooseYLabelScale_Tera(t *testing.T) {
+	scale := chooseYLabelScale(0, 5e12)
+	if scale.suffix != "T" {
+		t.Fatalf("expected T suffix, got %q", scale.suffix)
+	}
+}
+
+func TestFormatYLabel_NoScale(t *testing.T) {
+	got := formatYLabel(42.5, yLabelScale{0, ""})
+	if got != "42.500" {
+		t.Fatalf("expected 42.500, got %s", got)
+	}
+}
+
+func TestFormatYLabel_WithScale(t *testing.T) {
+	got := formatYLabel(1500, yLabelScale{1e3, "K"})
+	if got != "1.500K" {
+		t.Fatalf("expected 1.500K, got %s", got)
 	}
 }
 
@@ -151,7 +169,7 @@ func TestRenderStatic_ProducesOutput(t *testing.T) {
 		Values: makeSineValues(60),
 	}
 
-	result := RenderStatic(s, 80, 15)
+	result := RenderStatic(s, 80, 25)
 	if result == "" {
 		t.Fatal("expected non-empty chart output")
 	}
@@ -159,6 +177,22 @@ func TestRenderStatic_ProducesOutput(t *testing.T) {
 	lines := strings.Split(result, "\n")
 	if len(lines) < 10 {
 		t.Fatalf("expected at least 10 lines in chart, got %d", len(lines))
+	}
+}
+
+func TestRenderStatic_ContainsXAxisTimestamps(t *testing.T) {
+	now := time.Now()
+	s := thanos.Series{
+		Labels: map[string]string{},
+		Times:  makeTimes(now, 60, 30*time.Second),
+		Values: makeSineValues(60),
+	}
+
+	result := RenderStatic(s, 80, 25)
+	// The X-axis should contain the hour from the start time formatted in local timezone
+	hourStr := now.Format("15:")
+	if !strings.Contains(result, hourStr) {
+		t.Fatalf("expected X-axis timestamp containing %q, got:\n%s", hourStr, result)
 	}
 }
 
@@ -170,8 +204,8 @@ func TestRenderStatic_RespectsWidthHeight(t *testing.T) {
 		Values: makeSineValues(30),
 	}
 
-	narrow := RenderStatic(s, 40, 10)
-	wide := RenderStatic(s, 120, 25)
+	narrow := RenderStatic(s, 80, 15)
+	wide := RenderStatic(s, 120, 30)
 
 	narrowLines := strings.Split(narrow, "\n")
 	wideLines := strings.Split(wide, "\n")

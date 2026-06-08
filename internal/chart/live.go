@@ -36,7 +36,6 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 	fmt.Print("\033[?25l")
 
-	// Initial fetch
 	series, err := fetchLive(ctx, opts)
 	if err != nil {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
@@ -53,7 +52,6 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 	var mu sync.Mutex
 
-	// Background refresh goroutine
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -66,8 +64,8 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				newSeries, err := fetchLive(ctx, opts)
-				if err != nil || len(newSeries) == 0 {
+				newSeries, fetchErr := fetchLive(ctx, opts)
+				if fetchErr != nil || len(newSeries) == 0 {
 					continue
 				}
 
@@ -81,9 +79,6 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 				state.resetViewport()
 				lastRefresh = time.Now()
-				mu.Unlock()
-
-				mu.Lock()
 				renderLiveFrame(state, lastRefresh, opts.Refresh)
 				mu.Unlock()
 			}
@@ -97,8 +92,8 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 	buf := make([]byte, 3)
 
 	for {
-		n, err := os.Stdin.Read(buf)
-		if err != nil {
+		n, readErr := os.Stdin.Read(buf)
+		if readErr != nil {
 			return nil
 		}
 
@@ -142,29 +137,21 @@ func fetchLive(ctx context.Context, opts LiveOptions) ([]thanos.Series, error) {
 }
 
 func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) {
-	termW := config.TerminalWidth()
-	termH := config.TerminalHeight()
+	termW, termH := config.TerminalSize()
 
-	chartHeight := termH - 7
-	if chartHeight < 5 {
-		chartHeight = 5
-	}
+	// Reserve 2 rows: status + controls
+	chartHeight := termH - 2
 
 	cur := s.currentSeries()
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
 	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
 
-	opts := []asciigraph.Option{
-		asciigraph.Height(chartHeight),
-		asciigraph.Width(termW - 15),
-	}
+	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight)
 
-	if len(viewTimes) > 0 {
-		caption := formatViewCaption(viewTimes, viewVals)
-		opts = append(opts, asciigraph.Caption(caption))
-	}
-
-	chart := asciigraph.Plot(viewVals, opts...)
+	graph := strings.ReplaceAll(
+		asciigraph.Plot(viewVals, opts...),
+		"\n", "\r\n",
+	)
 
 	labels := thanos.LabelSetString(cur.Labels)
 	nextRefresh := lastRefresh.Add(refreshInterval)
@@ -174,13 +161,13 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 		untilRefresh = 0
 	}
 
-	status := fmt.Sprintf("LIVE (refresh %s, next in %s) | Series %d/%d %s | Samples %d-%d of %d",
+	status := fmt.Sprintf("  LIVE (refresh %s, next in %s) | Series %d/%d %s | Samples %d-%d of %d",
 		refreshInterval, untilRefresh,
 		s.SeriesIndex+1, len(s.AllSeries), labels,
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
 
-	controls := "←/→ pan  ↑/↓ zoom  Space/Bksp series  q quit"
+	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  q quit"
 
 	if len(status) > termW {
 		status = status[:termW]
@@ -188,12 +175,12 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 
 	var sb strings.Builder
 	sb.WriteString("\033[2J\033[H")
-	fmt.Fprintf(&sb, "Query: %s\n", s.Query)
-	sb.WriteString(chart)
-	sb.WriteString("\n\n")
-	sb.WriteString(status)
-	sb.WriteString("\n")
-	sb.WriteString(controls)
+	sb.WriteString(graph)
+	sb.WriteString("\r\n")
+	fmt.Fprintf(&sb, "\033[%d;1H", termH-1)
+	fmt.Fprintf(&sb, "%-*s", termW, status)
+	fmt.Fprintf(&sb, "\033[%d;1H", termH)
+	fmt.Fprintf(&sb, "%-*s", termW, controls)
 
 	fmt.Print(sb.String())
 }

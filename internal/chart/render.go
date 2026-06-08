@@ -10,6 +10,29 @@ import (
 	"github.com/guptarohit/asciigraph"
 )
 
+const (
+	defaultXAxisTickCount = 8
+	minXAxisTickCount     = 2
+	yAxisDefaultOffset    = 3
+	minYAxisLabelWidth    = 4
+	// extraRows: X-axis separator (1) + X-axis labels (1) + caption (1) + blank (1)
+	extraRows             = 4
+	yLabelFormatThreshold = 10000
+	yLabelFormatPrecision = 3
+)
+
+type yLabelScale struct {
+	divisor float64
+	suffix  string
+}
+
+var yLabelScales = []yLabelScale{
+	{1e12, "T"},
+	{1e9, "G"},
+	{1e6, "M"},
+	{1e3, "K"},
+}
+
 // RenderStatic renders a single series as an ASCII chart and returns the string.
 func RenderStatic(s thanos.Series, widthOverride, heightOverride int) string {
 	width := widthOverride
@@ -22,7 +45,7 @@ func RenderStatic(s thanos.Series, widthOverride, heightOverride int) string {
 		height = config.DefaultHeight
 	}
 
-	opts := buildOptions(s, width, height)
+	opts := buildChartOptions(s.Values, s.Times, width, height)
 
 	return asciigraph.Plot(s.Values, opts...)
 }
@@ -40,63 +63,107 @@ func PrintStatic(s thanos.Series, widthOverride, heightOverride int) {
 	fmt.Println()
 }
 
-func buildOptions(s thanos.Series, width, height int) []asciigraph.Option {
-	opts := []asciigraph.Option{
-		asciigraph.Height(height),
-		asciigraph.Width(width - 15), // leave room for Y-axis labels
+// buildChartOptions computes plot dimensions and returns asciigraph options
+// with proper X-axis timestamps and Y-axis formatting.
+func buildChartOptions(values []float64, times []time.Time, totalWidth, totalHeight int) []asciigraph.Option {
+	first := times[0]
+	last := times[len(times)-1]
+
+	firstUnix := float64(first.Unix())
+	lastUnix := float64(last.Unix())
+
+	tickCount := min(len(times), defaultXAxisTickCount)
+	tickCount = max(tickCount, minXAxisTickCount)
+
+	timeFmt := pickTimeFormat(first, last)
+
+	minVal, maxVal := minMax(values)
+	scale := chooseYLabelScale(minVal, maxVal)
+	yLabelWidth := yAxisLabelWidth(values, scale)
+
+	labelOverhang := (len(timeFmt) + 1) / 2
+	plotWidth := totalWidth - yLabelWidth - yAxisDefaultOffset - labelOverhang
+	if plotWidth < 10 {
+		plotWidth = 10
 	}
 
-	caption := formatCaption(s)
-	if caption != "" {
-		opts = append(opts, asciigraph.Caption(caption))
+	plotHeight := totalHeight - extraRows
+	if plotHeight < 5 {
+		plotHeight = 5
 	}
 
-	return opts
+	return []asciigraph.Option{
+		asciigraph.Height(plotHeight),
+		asciigraph.Width(plotWidth),
+		asciigraph.Caption(thanos.LabelSetString(nil)),
+		asciigraph.XAxisRange(firstUnix, lastUnix),
+		asciigraph.XAxisTickCount(tickCount),
+		asciigraph.XAxisValueFormatter(func(v float64) string {
+			return time.Unix(int64(v), 0).Format(timeFmt)
+		}),
+		asciigraph.YAxisValueFormatter(func(v float64) string {
+			return formatYLabel(v, scale)
+		}),
+	}
 }
 
-func formatCaption(s thanos.Series) string {
-	if len(s.Times) == 0 {
-		return ""
+func chooseYLabelScale(minVal, maxVal float64) yLabelScale {
+	peak := max(math.Abs(minVal), math.Abs(maxVal))
+	if peak < yLabelFormatThreshold {
+		return yLabelScale{0, ""}
 	}
 
-	start := s.Times[0]
-	end := s.Times[len(s.Times)-1]
-	dur := end.Sub(start)
+	for _, scale := range yLabelScales {
+		if peak >= scale.divisor {
+			return scale
+		}
+	}
 
-	var timeFormat string
+	return yLabelScale{0, ""}
+}
+
+func formatYLabel(v float64, scale yLabelScale) string {
+	if scale.divisor == 0 {
+		return fmt.Sprintf("%.*f", yLabelFormatPrecision, v)
+	}
+
+	return fmt.Sprintf("%.*f%s", yLabelFormatPrecision, v/scale.divisor, scale.suffix)
+}
+
+func yAxisLabelWidth(values []float64, scale yLabelScale) int {
+	minVal, maxVal := minMax(values)
+	w := max(len(formatYLabel(minVal, scale)), len(formatYLabel(maxVal, scale)))
+
+	return max(w, minYAxisLabelWidth)
+}
+
+func pickTimeFormat(first, last time.Time) string {
+	span := last.Sub(first)
+
 	switch {
-	case dur < time.Hour:
-		timeFormat = "15:04:05"
-	case dur < 24*time.Hour:
-		timeFormat = "15:04"
+	case span < time.Hour:
+		return "15:04:05"
+	case span < 24*time.Hour:
+		return "15:04"
 	default:
-		timeFormat = "Jan 02 15:04"
+		return "Jan 02 15:04"
 	}
-
-	minVal, maxVal := minMax(s.Values)
-
-	return fmt.Sprintf("%s .. %s | min: %s  max: %s",
-		start.Format(timeFormat),
-		end.Format(timeFormat),
-		humanNumber(minVal),
-		humanNumber(maxVal),
-	)
 }
 
 func minMax(vals []float64) (float64, float64) {
-	min, max := vals[0], vals[0]
+	mn, mx := vals[0], vals[0]
 
 	for _, v := range vals[1:] {
-		if v < min {
-			min = v
+		if v < mn {
+			mn = v
 		}
 
-		if v > max {
-			max = v
+		if v > mx {
+			mx = v
 		}
 	}
 
-	return min, max
+	return mn, mx
 }
 
 func humanNumber(v float64) string {

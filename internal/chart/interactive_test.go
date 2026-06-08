@@ -193,21 +193,3 @@ func TestInteractiveState_SeriesSwitchResetsViewport(t *testing.T) {
 	}
 }
 
-func TestFormatViewCaption_Empty(t *testing.T) {
-	got := formatViewCaption(nil, nil)
-	if got != "" {
-		t.Fatalf("expected empty, got %q", got)
-	}
-}
-
-func TestFormatViewCaption_WithData(t *testing.T) {
-	now := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
-	times := []time.Time{now, now.Add(5 * time.Minute)}
-	values := []float64{10.0, 20.0}
-
-	got := formatViewCaption(times, values)
-	if got == "" {
-		t.Fatal("expected non-empty caption")
-	}
-}
-
