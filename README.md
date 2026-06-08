@@ -4,6 +4,8 @@ Live ASCII Prometheus charts for OpenShift.
 
 `ocpchart` queries Prometheus/Thanos on OpenShift clusters and renders live ASCII charts directly in the terminal. No database, no setup -- just point it at a cluster and start charting.
 
+This whole project has been totally vibe coded using Cursor.
+
 ## Features
 
 - **Metric discovery** -- list all available Prometheus metrics, filter by regex
