@@ -214,15 +214,16 @@ func handleInteractiveArrowInput(state *InteractiveState, n int, buf []byte) {
 func renderFrame(s *InteractiveState) {
 	termW, termH := config.TerminalSize()
 
-	chartHeight := termH - statusBarRows
+	chartHeight := termH - statusBarRows - 1 // -1 for title line
 
 	cur := s.currentSeries()
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
 	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
 
-	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
+	caption := thanos.LabelSetString(cur.Labels)
 	opts := buildChartOptions(viewVals, viewTimes, termW, chartHeight, caption)
 
+	title := centerText(s.Query, termW)
 	graph := toCRLF(asciigraph.Plot(viewVals, opts...))
 
 	labels := thanos.LabelSetString(cur.Labels)
@@ -237,6 +238,8 @@ func renderFrame(s *InteractiveState) {
 
 	var sb strings.Builder
 	clearScreenAndMoveHome(&sb)
+	sb.WriteString(title)
+	sb.WriteString("\r\n")
 	sb.WriteString(graph)
 	sb.WriteString("\r\n")
 	moveCursor(&sb, termH, 1)

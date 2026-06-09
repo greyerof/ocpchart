@@ -171,15 +171,16 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 	fmt.Print(sb.String())
 }
 
-// liveGraph builds the chart body rendered in live mode.
+// liveGraph builds the chart body rendered in live mode (title + plot).
 func liveGraph(s *InteractiveState, termW, termH int) string {
 	cur := s.currentSeries()
 	viewVals := cur.Values[s.ViewStart:s.ViewEnd]
 	viewTimes := cur.Times[s.ViewStart:s.ViewEnd]
-	caption := s.Query + "\n" + thanos.LabelSetString(cur.Labels)
+	caption := thanos.LabelSetString(cur.Labels)
 
-	opts := buildChartOptions(viewVals, viewTimes, termW, termH-2, caption)
-	return toCRLF(asciigraph.Plot(viewVals, opts...))
+	opts := buildChartOptions(viewVals, viewTimes, termW, termH-3, caption)
+	title := centerText(s.Query, termW)
+	return title + "\r\n" + toCRLF(asciigraph.Plot(viewVals, opts...))
 }
 
 // liveStatusLine formats the status line shown above live mode controls.

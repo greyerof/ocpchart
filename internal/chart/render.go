@@ -3,6 +3,7 @@ package chart
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/greyerof/ocpchart/internal/config"
@@ -15,8 +16,8 @@ const (
 	minXAxisTickCount     = 2
 	yAxisDefaultOffset    = 3
 	minYAxisLabelWidth    = 4
-	// extraRows: X-axis separator (1) + X-axis labels (1) + caption (2) + blank (1)
-	extraRows             = 5
+	// extraRows: X-axis separator (1) + X-axis labels (1) + caption (1) + blank (1)
+	extraRows             = 4
 	yLabelFormatThreshold = 10000
 	yLabelFormatPrecision = 3
 )
@@ -45,10 +46,11 @@ func RenderStatic(s thanos.Series, widthOverride, heightOverride int, query stri
 		height = config.DefaultHeight
 	}
 
-	caption := query + "\n" + thanos.LabelSetString(s.Labels)
-	opts := buildChartOptions(s.Values, s.Times, width, height, caption)
+	caption := thanos.LabelSetString(s.Labels)
+	opts := buildChartOptions(s.Values, s.Times, width, height-1, caption)
 
-	return asciigraph.Plot(s.Values, opts...)
+	title := centerText(query, width)
+	return title + "\n" + asciigraph.Plot(s.Values, opts...)
 }
 
 // PrintStatic prints a single series chart to stdout with a header.
@@ -170,6 +172,16 @@ func minMax(vals []float64) (float64, float64) {
 	}
 
 	return mn, mx
+}
+
+// centerText centers a string within the given width using spaces.
+func centerText(s string, width int) string {
+	if len(s) >= width {
+		return s[:width]
+	}
+
+	pad := (width - len(s)) / 2
+	return strings.Repeat(" ", pad) + s
 }
 
 // humanNumber formats a number using human-friendly unit suffixes.

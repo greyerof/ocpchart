@@ -17,12 +17,15 @@ const (
 	keyCtrlC        = 3
 )
 
+const hScrollStep = 10
+
 type pickerState struct {
 	allLabels []string
 	input     string
 	filtered  []int
 	cursor    int
 	scroll    int
+	hScroll   int
 }
 
 // newPickerState initializes picker state with all series visible.
@@ -59,6 +62,19 @@ func (p *pickerState) cursorDown() {
 		if p.cursor >= p.scroll+maxVisibleItems {
 			p.scroll = p.cursor - maxVisibleItems + 1
 		}
+	}
+}
+
+// scrollRight shifts the visible label content to reveal text past the right edge.
+func (p *pickerState) scrollRight() {
+	p.hScroll += hScrollStep
+}
+
+// scrollLeft shifts the visible label content back toward the beginning.
+func (p *pickerState) scrollLeft() {
+	p.hScroll -= hScrollStep
+	if p.hScroll < 0 {
+		p.hScroll = 0
 	}
 }
 
@@ -163,7 +179,7 @@ func handlePickerSingleByteInput(state *pickerState, n int, buf []byte) (index i
 	return -1, false, false
 }
 
-// handlePickerArrowInput handles up/down arrow navigation for picker results.
+// handlePickerArrowInput handles arrow key navigation for picker results and horizontal scroll.
 func handlePickerArrowInput(state *pickerState, n int, buf []byte) {
 	// Arrow keys arrive as a 3-byte ANSI escape sequence: ESC [ <code>.
 	if n != 3 || buf[0] != keyEscape || buf[1] != 91 {
@@ -175,6 +191,10 @@ func handlePickerArrowInput(state *pickerState, n int, buf []byte) {
 		state.cursorUp()
 	case 'B':
 		state.cursorDown()
+	case 'C':
+		state.scrollRight()
+	case 'D':
+		state.scrollLeft()
 	}
 }
 
@@ -233,7 +253,7 @@ func drawPickerContent(sb *strings.Builder, state *pickerState, startRow, startC
 	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, "")
 	row++
 
-	footer := fmt.Sprintf("%d of %d series | Enter select  Esc cancel", len(state.filtered), len(state.allLabels))
+	footer := fmt.Sprintf("%d of %d series | Enter select  Esc cancel  \u2190/\u2192 scroll", len(state.filtered), len(state.allLabels))
 	writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(footer, innerW))
 	row++
 	writeAt(sb, row, startCol, "\u2514%s\u2518", strings.Repeat("\u2500", boxW-2))
@@ -250,7 +270,9 @@ func drawPickerItems(sb *strings.Builder, state *pickerState, row, startCol, inn
 		if i == state.cursor {
 			prefix = "> "
 		}
-		writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(prefix+label, innerW))
+
+		visible := applyHScroll(label, state.hScroll)
+		writeAt(sb, row, startCol, "\u2502 %-*s \u2502", innerW, truncate(prefix+visible, innerW))
 		row++
 		itemsShown++
 	}
@@ -278,6 +300,19 @@ func buildTopBorder(width int, title string) string {
 	}
 
 	return strings.Repeat("\u2500", leftDashes) + title + strings.Repeat("\u2500", rightDashes)
+}
+
+// applyHScroll returns the portion of s visible after horizontal scrolling.
+func applyHScroll(s string, offset int) string {
+	if offset <= 0 {
+		return s
+	}
+
+	if offset >= len(s) {
+		return ""
+	}
+
+	return s[offset:]
 }
 
 // truncate shortens strings to fit a fixed-width terminal field.
