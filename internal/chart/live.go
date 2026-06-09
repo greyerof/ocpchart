@@ -152,12 +152,8 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 	termW, termH := config.TerminalSize()
 
 	graph := liveGraph(s, termW, termH)
-	status := liveStatusLine(s, lastRefresh, refreshInterval)
+	status := centerText(liveStatusLine(s, lastRefresh, refreshInterval), termW)
 	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit"
-
-	if len(status) > termW {
-		status = status[:termW]
-	}
 
 	var sb strings.Builder
 	clearScreenAndMoveHome(&sb)
@@ -186,15 +182,14 @@ func liveGraph(s *InteractiveState, termW, termH int) string {
 // liveStatusLine formats the status line shown above live mode controls.
 func liveStatusLine(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) string {
 	cur := s.currentSeries()
-	labels := thanos.LabelSetString(cur.Labels)
 	untilRefresh := time.Until(lastRefresh.Add(refreshInterval)).Truncate(time.Second)
 	if untilRefresh < 0 {
 		untilRefresh = 0
 	}
 
-	return fmt.Sprintf("  LIVE (refresh %s, next in %s) | Series %d/%d %s | Samples %d-%d of %d",
+	return fmt.Sprintf("LIVE (refresh %s, next in %s) | Series %d/%d | Samples %d-%d of %d",
 		refreshInterval, untilRefresh,
-		s.SeriesIndex+1, len(s.AllSeries), labels,
+		s.SeriesIndex+1, len(s.AllSeries),
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
 }

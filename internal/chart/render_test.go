@@ -215,6 +215,27 @@ func TestRenderStatic_RespectsWidthHeight(t *testing.T) {
 	}
 }
 
+func TestCenterText_Centered(t *testing.T) {
+	got := centerText("hello", 11)
+	if got != "   hello" {
+		t.Fatalf("expected %q, got %q", "   hello", got)
+	}
+}
+
+func TestCenterText_ExactWidth(t *testing.T) {
+	got := centerText("hello", 5)
+	if got != "hello" {
+		t.Fatalf("expected %q, got %q", "hello", got)
+	}
+}
+
+func TestCenterText_TooWide(t *testing.T) {
+	got := centerText("hello world", 5)
+	if got != "hello" {
+		t.Fatalf("expected %q, got %q", "hello", got)
+	}
+}
+
 func makeTimes(start time.Time, count int, step time.Duration) []time.Time {
 	times := make([]time.Time, count)
 	for i := range times {
