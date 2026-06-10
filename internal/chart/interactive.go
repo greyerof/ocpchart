@@ -226,15 +226,16 @@ func renderFrame(s *InteractiveState) {
 	title := centerText(s.Query, termW)
 	graph := toCRLF(asciigraph.Plot(viewVals, opts...))
 
-	labels := thanos.LabelSetString(cur.Labels)
-	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit",
-		s.SeriesIndex+1, len(s.AllSeries), labels,
+	status := fmt.Sprintf("Series %d/%d | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit",
+		s.SeriesIndex+1, len(s.AllSeries),
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
 	)
 
 	if len(status) > termW {
 		status = status[:termW]
 	}
+
+	status = centerText(status, termW)
 
 	var sb strings.Builder
 	clearScreenAndMoveHome(&sb)

@@ -25,8 +25,8 @@ var rootCmd = &cobra.Command{
 	Use:   "ocpchart",
 	Short: "Live ASCII Prometheus charts for OpenShift",
 	Long: `ocpchart queries Prometheus/Thanos on OpenShift clusters and renders
-live ASCII charts in the terminal. Supports interactive navigation,
-auto-refresh, and metric discovery.`,
+interactive ASCII charts in the terminal. Supports pan/zoom navigation,
+live auto-refresh, and metric discovery.`,
 	SilenceUsage: true,
 }
 
