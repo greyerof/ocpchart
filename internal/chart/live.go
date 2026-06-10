@@ -153,7 +153,7 @@ func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval
 
 	graph := liveGraph(s, termW, termH)
 	status := centerText(liveStatusLine(s, lastRefresh, refreshInterval), termW)
-	controls := "  \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit"
+	controls := "  " + controlsHint
 
 	var sb strings.Builder
 	clearScreenAndMoveHome(&sb)
