@@ -19,14 +19,10 @@ func TestLiveStatusLine_DoesNotContainLabels(t *testing.T) {
 		ViewEnd:  50,
 	}
 
-	got := liveStatusLine(state, time.Now(), 30*time.Second)
+	got := liveStatusLine(state, 30*time.Second)
 
 	if strings.Contains(got, "worker-0") {
 		t.Fatalf("status line should not contain labels, got: %s", got)
-	}
-
-	if !strings.Contains(got, "LIVE") {
-		t.Fatalf("status line should contain LIVE prefix, got: %s", got)
 	}
 
 	if !strings.Contains(got, "Series 1/1") {
@@ -35,6 +31,10 @@ func TestLiveStatusLine_DoesNotContainLabels(t *testing.T) {
 
 	if !strings.Contains(got, "Samples 1-50 of 50") {
 		t.Fatalf("status line should contain sample range, got: %s", got)
+	}
+
+	if !strings.Contains(got, "Refresh 30s") {
+		t.Fatalf("status line should contain refresh interval, got: %s", got)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestLiveStatusLine_Format(t *testing.T) {
 		ViewEnd:     8,
 	}
 
-	got := liveStatusLine(state, time.Now(), 15*time.Second)
+	got := liveStatusLine(state, 15*time.Second)
 
 	if !strings.Contains(got, "Series 2/2") {
 		t.Fatalf("expected Series 2/2, got: %s", got)

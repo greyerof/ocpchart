@@ -36,44 +36,44 @@ func RunLive(ctx context.Context, opts LiveOptions) error {
 
 	hideTerminalCursor()
 
-	state, lastRefresh, err := initLiveState(ctx, opts, oldState)
+	state, err := initLiveState(ctx, opts, oldState)
 	if err != nil {
 		return err
 	}
 
-	// The refresh goroutine and input loop both mutate/read `state` and `lastRefresh`.
+	// The refresh goroutine and input loop both mutate/read `state`.
 	// This mutex keeps those operations serialized so we render consistent frames.
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	startLiveRefreshLoop(ctx, opts, &mu, state, &lastRefresh)
+	startLiveRefreshLoop(ctx, opts, &mu, state)
 
 	mu.Lock()
-	renderLiveFrame(state, lastRefresh, opts.Refresh)
+	renderLiveFrame(state, opts.Refresh)
 	mu.Unlock()
 
-	return runLiveInputLoop(&mu, state, &lastRefresh, opts.Refresh)
+	return runLiveInputLoop(&mu, state, opts.Refresh)
 }
 
 // initLiveState fetches initial data and constructs the live interactive state.
-func initLiveState(ctx context.Context, opts LiveOptions, oldState *term.State) (*InteractiveState, time.Time, error) {
+func initLiveState(ctx context.Context, opts LiveOptions, oldState *term.State) (*InteractiveState, error) {
 	series, err := fetchLive(ctx, opts)
 	if err != nil {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		return nil, time.Time{}, fmt.Errorf("initial query failed: %w", err)
+		return nil, fmt.Errorf("initial query failed: %w", err)
 	}
 
 	if len(series) == 0 {
 		_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		return nil, time.Time{}, fmt.Errorf("query returned no data")
+		return nil, fmt.Errorf("query returned no data")
 	}
 
-	return NewInteractiveState(series, opts.Query), time.Now(), nil
+	return NewInteractiveState(series, opts.Query), nil
 }
 
 // startLiveRefreshLoop starts the background ticker loop for data refresh.
-func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
+func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState) {
 	go func() {
 		ticker := time.NewTicker(opts.Refresh)
 		defer ticker.Stop()
@@ -83,14 +83,14 @@ func startLiveRefreshLoop(ctx context.Context, opts LiveOptions, mu *sync.Mutex,
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				refreshLiveState(ctx, opts, mu, state, lastRefresh)
+				refreshLiveState(ctx, opts, mu, state)
 			}
 		}
 	}()
 }
 
 // refreshLiveState fetches fresh data and redraws the frame when data is valid.
-func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time) {
+func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, state *InteractiveState) {
 	newSeries, fetchErr := fetchLive(ctx, opts)
 	// Keep the current frame if refresh fails; next ticks will retry automatically.
 	if fetchErr != nil || len(newSeries) == 0 {
@@ -99,8 +99,7 @@ func refreshLiveState(ctx context.Context, opts LiveOptions, mu *sync.Mutex, sta
 
 	mu.Lock()
 	updateLiveSeries(state, newSeries)
-	*lastRefresh = time.Now()
-	renderLiveFrame(state, *lastRefresh, opts.Refresh)
+	renderLiveFrame(state, opts.Refresh)
 	mu.Unlock()
 }
 
@@ -115,7 +114,7 @@ func updateLiveSeries(state *InteractiveState, series []thanos.Series) {
 }
 
 // runLiveInputLoop handles keyboard interaction for live mode.
-func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time.Time, refreshInterval time.Duration) error {
+func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, refreshInterval time.Duration) error {
 	buf := make([]byte, 3)
 
 	for {
@@ -134,7 +133,7 @@ func runLiveInputLoop(mu *sync.Mutex, state *InteractiveState, lastRefresh *time
 			handleInteractiveArrowInput(state, n, buf)
 		}
 
-		renderLiveFrame(state, *lastRefresh, refreshInterval)
+		renderLiveFrame(state, refreshInterval)
 		mu.Unlock()
 	}
 }
@@ -148,11 +147,11 @@ func fetchLive(ctx context.Context, opts LiveOptions) ([]thanos.Series, error) {
 }
 
 // renderLiveFrame renders one full-screen frame for live mode.
-func renderLiveFrame(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) {
+func renderLiveFrame(s *InteractiveState, refreshInterval time.Duration) {
 	termW, termH := config.TerminalSize()
 
 	graph := liveGraph(s, termW, termH)
-	status := centerText(liveStatusLine(s, lastRefresh, refreshInterval), termW)
+	status := centerText(liveStatusLine(s, refreshInterval), termW)
 	controls := "  " + controlsHint
 
 	var sb strings.Builder
@@ -180,16 +179,12 @@ func liveGraph(s *InteractiveState, termW, termH int) string {
 }
 
 // liveStatusLine formats the status line shown above live mode controls.
-func liveStatusLine(s *InteractiveState, lastRefresh time.Time, refreshInterval time.Duration) string {
+func liveStatusLine(s *InteractiveState, refreshInterval time.Duration) string {
 	cur := s.currentSeries()
-	untilRefresh := time.Until(lastRefresh.Add(refreshInterval)).Truncate(time.Second)
-	if untilRefresh < 0 {
-		untilRefresh = 0
-	}
 
-	return fmt.Sprintf("LIVE (refresh %s, next in %s) | Series %d/%d | Samples %d-%d of %d",
-		refreshInterval, untilRefresh,
+	return fmt.Sprintf("Series %d/%d | Samples %d-%d of %d | Refresh %s",
 		s.SeriesIndex+1, len(s.AllSeries),
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
+		refreshInterval,
 	)
 }
