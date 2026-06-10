@@ -63,7 +63,7 @@ func PrintStatic(s thanos.Series, widthOverride, heightOverride int, query strin
 		s.Times[len(s.Times)-1].Format("2006-01-02 15:04:05"),
 	)
 	fmt.Println(RenderStatic(s, widthOverride, heightOverride, query))
-	fmt.Println()
+	fmt.Printf("\nSamples: %d\n", len(s.Values))
 }
 
 // buildChartOptions computes plot dimensions and returns asciigraph options

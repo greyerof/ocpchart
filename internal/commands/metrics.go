@@ -10,31 +10,33 @@ import (
 
 var flagMetricFilter string
 
-var metricsCmd = &cobra.Command{
-	Use:   "metrics",
-	Short: "Discover available metrics",
-}
+// newMetricsCmd builds the "metrics" subcommand group and its children.
+func newMetricsCmd() *cobra.Command {
+	metricsCmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Discover available metrics",
+	}
 
-var metricsListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List available metric names from the cluster",
-	Long: `Fetches all metric names from Thanos and prints them sorted.
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List available metric names from the cluster",
+		Long: `Fetches all metric names from Thanos and prints them sorted.
 Use --filter to match a subset with a regular expression.`,
-	Example: `  ocpchart metrics list
+		Example: `  ocpchart metrics list
   ocpchart metrics list --filter "cpu"
   ocpchart metrics list --filter "node_network.*bytes"`,
-	RunE: runMetricsList,
+		RunE: runMetricsList,
+	}
+
+	listCmd.Flags().StringVarP(&flagMetricFilter, "filter", "f", "", "regex to filter metric names")
+
+	metricsCmd.AddCommand(listCmd)
+
+	return metricsCmd
 }
 
-// init registers metrics subcommands and their flags.
-func init() {
-	metricsListCmd.Flags().StringVarP(&flagMetricFilter, "filter", "f", "", "regex to filter metric names")
-
-	metricsCmd.AddCommand(metricsListCmd)
-	rootCmd.AddCommand(metricsCmd)
-}
-
-// runMetricsList fetches and prints metric names, optionally filtered by regex.
+// runMetricsList fetches all Prometheus metric names from the cluster and prints
+// them to stdout, optionally filtering by a user-supplied regular expression.
 func runMetricsList(cmd *cobra.Command, args []string) error {
 	client, err := resolveClient()
 	if err != nil {

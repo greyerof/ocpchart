@@ -11,7 +11,16 @@ import (
 	"golang.org/x/term"
 )
 
-const statusBarRows = 1
+const (
+	statusBarRows = 1
+
+	arrowLeft  = "\u2190"
+	arrowRight = "\u2192"
+	arrowUp    = "\u2191"
+	arrowDown  = "\u2193"
+
+	controlsHint = arrowLeft + "/" + arrowRight + " pan  " + arrowUp + "/" + arrowDown + " zoom  Space/Bksp series  g goto  q quit"
+)
 
 // InteractiveState holds the mutable state for interactive chart navigation.
 type InteractiveState struct {
@@ -225,17 +234,31 @@ func renderFrame(s *InteractiveState) {
 
 	title := centerText(s.Query, termW)
 	graph := toCRLF(asciigraph.Plot(viewVals, opts...))
+	status := interactiveStatusLine(s, termW)
 
-	labels := thanos.LabelSetString(cur.Labels)
-	status := fmt.Sprintf("  Series %d/%d %s | Samples %d-%d of %d | \u2190/\u2192 pan  \u2191/\u2193 zoom  Space/Bksp series  g goto  q quit",
-		s.SeriesIndex+1, len(s.AllSeries), labels,
+	fmt.Print(composeInteractiveFrame(termW, termH, title, graph, status))
+}
+
+// interactiveStatusLine builds the bottom status bar showing series position,
+// sample range, and keyboard controls.
+func interactiveStatusLine(s *InteractiveState, termW int) string {
+	cur := s.currentSeries()
+	status := fmt.Sprintf("Series %d/%d | Samples %d-%d of %d | %s",
+		s.SeriesIndex+1, len(s.AllSeries),
 		s.ViewStart+1, s.ViewEnd, len(cur.Values),
+		controlsHint,
 	)
 
 	if len(status) > termW {
 		status = status[:termW]
 	}
 
+	return centerText(status, termW)
+}
+
+// composeInteractiveFrame assembles a full-screen terminal frame with a centered
+// title at the top, the chart body, and a status bar pinned to the bottom row.
+func composeInteractiveFrame(termW, termH int, title, graph, status string) string {
 	var sb strings.Builder
 	clearScreenAndMoveHome(&sb)
 	sb.WriteString(title)
@@ -245,5 +268,5 @@ func renderFrame(s *InteractiveState) {
 	moveCursor(&sb, termH, 1)
 	writePaddedLine(&sb, termW, status)
 
-	fmt.Print(sb.String())
+	return sb.String()
 }

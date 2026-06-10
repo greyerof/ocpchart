@@ -8,10 +8,10 @@ This whole project has been totally vibe coded using Cursor.
 
 ## Features
 
+- **Interactive charts** -- run a PromQL range query, explore with pan/zoom/series navigation
+- **Live mode** -- auto-refreshing charts with a rolling time window via `--refresh`
+- **One-shot charts** -- static ASCII output via `--once`
 - **Metric discovery** -- list all available Prometheus metrics, filter by regex
-- **One-shot charts** -- run a PromQL range query, get an ASCII chart
-- **Live mode** -- auto-refreshing charts with a rolling time window
-- **Interactive navigation** -- pan, zoom, and switch between time series
 - **Two auth modes** -- kubeconfig auto-discovery or manual token + URL
 
 ## Installation
@@ -38,17 +38,17 @@ make build
 ocpchart metrics list --kubeconfig ~/.kube/config
 ocpchart metrics list --filter "cpu"
 
-# One-shot chart (last hour, auto step)
-ocpchart query 'rate(node_cpu_seconds_total{mode="idle"}[5m])' --since 1h
+# Interactive chart with pan/zoom (default)
+ocpchart plot 'rate(node_cpu_seconds_total{mode="idle"}[5m])' --since 1h
 
-# Interactive chart with pan/zoom
-ocpchart query 'node_memory_MemAvailable_bytes' --since 2h -i
+# Static one-shot chart
+ocpchart plot 'node_memory_MemAvailable_bytes' --since 2h --once
 
-# Live-refresh chart (updates every 30s)
-ocpchart live 'rate(node_cpu_seconds_total{mode="idle"}[5m])' --since 30m
+# Live-refresh chart
+ocpchart plot 'sum(up)' --since 30m --refresh 30s
 
-# Live with custom refresh interval
-ocpchart live 'sum(up)' --since 1h --refresh 10s
+# Live with faster refresh
+ocpchart plot 'sum(up)' --since 1h --refresh 10s
 ```
 
 ## Authentication
@@ -56,7 +56,7 @@ ocpchart live 'sum(up)' --since 1h --refresh 10s
 ### Kubeconfig (auto-discovery)
 
 ```bash
-ocpchart query 'up' --since 1h --kubeconfig ~/.kube/config
+ocpchart plot 'up' --since 1h --kubeconfig ~/.kube/config
 ```
 
 The kubeconfig user must have permission to create tokens for the `prometheus-k8s` service account in `openshift-monitoring`. ocpchart auto-discovers the Thanos Querier route and creates a short-lived bearer token.
@@ -66,7 +66,7 @@ If `--kubeconfig` is omitted, the `$KUBECONFIG` environment variable is used.
 ### Manual token + URL
 
 ```bash
-ocpchart query 'up' --since 1h \
+ocpchart plot 'up' --since 1h \
   --thanos-url https://thanos-querier.apps.cluster.example.com \
   --token <bearer-token>
 ```
@@ -87,32 +87,25 @@ List available Prometheus metric names.
 |------|-------|---------|-------------|
 | `--filter` | `-f` | | Regex to filter metric names |
 
-### `ocpchart query <promql>`
+### `ocpchart plot <promql>`
 
-Run a range query and render a chart.
-
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--since` | | *required* | How far back to query (e.g. `1h`, `30m`) |
-| `--until` | | now | End time (duration or RFC3339) |
-| `--step` | | auto | Query resolution step |
-| `--width` | | terminal width | Chart width in columns |
-| `--height` | | 20 | Chart height in rows |
-| `--interactive` | `-i` | false | Interactive pan/zoom mode |
-
-**Multi-series:** if the query returns multiple series, you're prompted to pick one. In interactive mode (`-i`), use Space/Backspace to cycle through them.
-
-### `ocpchart live <promql>`
-
-Auto-refreshing chart with a rolling time window.
+Run a range query and render an interactive ASCII chart. Charts are interactive by default with pan/zoom and series navigation.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--since` | *required* | Rolling window size |
+| `--since` | *required* | How far back to query (e.g. `1h`, `30m`) |
+| `--until` | now | End time (duration or RFC3339) |
 | `--step` | auto | Query resolution step |
-| `--refresh` | `30s` | How often to re-query |
+| `--once` | false | Print a static chart and exit (non-interactive) |
+| `--refresh` | | Auto-refresh interval for live mode (e.g. `30s`, `1m`) |
+| `--width` | terminal width | Chart width in columns (only with `--once`) |
+| `--height` | 20 | Chart height in rows (only with `--once`) |
 
-Live mode is always interactive (full-screen).
+**Modes:**
+
+- **Default (interactive):** full-screen chart with keyboard navigation. Data is fetched once.
+- **`--once`:** prints a static chart and exits. If the query returns multiple series, you're prompted to pick one.
+- **`--refresh`:** live auto-refreshing chart with a rolling time window. Mutually exclusive with `--once` and `--until`.
 
 ### Interactive controls
 
@@ -122,6 +115,7 @@ Live mode is always interactive (full-screen).
 | Up / Down | Zoom in / out |
 | Space | Next time series |
 | Backspace | Previous time series |
+| g | Go-to series picker |
 | q / Ctrl+C | Quit |
 
 ## License
