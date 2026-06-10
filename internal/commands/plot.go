@@ -27,15 +27,19 @@ var (
 	flagPlotRefresh time.Duration
 )
 
-var plotCmd = &cobra.Command{
-	Use:   "plot <promql>",
-	Short: "Run a PromQL query and render an interactive ASCII chart",
-	Long: `Executes a Prometheus range query against Thanos and displays the result
+// newPlotCmd builds the "plot" subcommand, which is the primary way to query
+// Prometheus and render charts. It supports three modes: interactive (default),
+// static one-shot (--once), and live auto-refresh (--refresh).
+func newPlotCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "plot <promql>",
+		Short: "Run a PromQL query and render an interactive ASCII chart",
+		Long: `Executes a Prometheus range query against Thanos and displays the result
 as an interactive ASCII line chart with pan/zoom and series navigation.
 
 Use --once for a static one-shot chart, or --refresh for a live auto-refreshing
 chart with a rolling time window.`,
-	Example: `  # Interactive chart (default)
+		Example: `  # Interactive chart (default)
   ocpchart plot 'rate(node_cpu_seconds_total{mode="idle"}[5m])' --since 1h
 
   # Static one-shot chart
@@ -43,12 +47,11 @@ chart with a rolling time window.`,
 
   # Live-refresh chart
   ocpchart plot 'sum(up)' --since 30m --refresh 10s`,
-	Args: cobra.ExactArgs(1),
-	RunE: runPlot,
-}
+		Args: cobra.ExactArgs(1),
+		RunE: runPlot,
+	}
 
-func init() {
-	f := plotCmd.Flags()
+	f := cmd.Flags()
 	f.DurationVar(&flagPlotSince, "since", 0, "how far back to query (required, e.g. 1h, 30m)")
 	f.StringVar(&flagPlotUntil, "until", "", "end time (Go duration relative to now, or RFC3339; default: now)")
 	f.DurationVar(&flagPlotStep, "step", 0, "query step (default: auto-calculated)")
@@ -57,11 +60,13 @@ func init() {
 	f.BoolVar(&flagPlotOnce, "once", false, "fetch once and print a static chart (non-interactive)")
 	f.DurationVar(&flagPlotRefresh, "refresh", 0, "auto-refresh interval for live mode (e.g. 30s, 1m)")
 
-	_ = plotCmd.MarkFlagRequired("since")
+	_ = cmd.MarkFlagRequired("since")
 
-	rootCmd.AddCommand(plotCmd)
+	return cmd
 }
 
+// runPlot is the top-level handler for the plot command. It validates flag
+// combinations and dispatches to the appropriate mode (live or query).
 func runPlot(cmd *cobra.Command, args []string) error {
 	if flagPlotOnce && flagPlotRefresh > 0 {
 		return fmt.Errorf("--once and --refresh are mutually exclusive")
@@ -85,6 +90,8 @@ func runPlot(cmd *cobra.Command, args []string) error {
 	return runPlotQuery(promql, client)
 }
 
+// runPlotQuery executes a single range query and either prints a static chart
+// (--once) or enters the interactive full-screen UI (default).
 func runPlotQuery(promql string, client *thanos.Client) error {
 	start, end, step, err := buildPlotWindow()
 	if err != nil {
@@ -120,6 +127,8 @@ func runPlotQuery(promql string, client *thanos.Client) error {
 	return chart.RunInteractive(series, promql)
 }
 
+// runPlotLive starts the live auto-refresh mode. Data is re-queried on a
+// rolling window every --refresh interval while the interactive UI stays open.
 func runPlotLive(promql string, client *thanos.Client) error {
 	step := flagPlotStep
 	if step == 0 {
@@ -138,6 +147,9 @@ func runPlotLive(promql string, client *thanos.Client) error {
 	})
 }
 
+// buildPlotWindow resolves start/end timestamps and query step from flag values.
+// If --until is omitted, the window ends at the current time.
+// If --step is omitted, it is auto-calculated from the window size and terminal width.
 func buildPlotWindow() (time.Time, time.Time, time.Duration, error) {
 	end := time.Now()
 	if flagPlotUntil != "" {
@@ -159,6 +171,8 @@ func buildPlotWindow() (time.Time, time.Time, time.Duration, error) {
 	return start, end, step, nil
 }
 
+// selectSeries prompts the user to choose one series when the query returns
+// multiple results. If only one series is returned, it is selected automatically.
 func selectSeries(series []thanos.Series) (thanos.Series, error) {
 	if len(series) == 1 {
 		return series[0], nil
@@ -186,7 +200,10 @@ func selectSeries(series []thanos.Series) (thanos.Series, error) {
 	return series[idx-1], nil
 }
 
+// parseUntil interprets the --until value as either a Go duration relative to
+// now (e.g. "5m" means 5 minutes ago) or an absolute RFC3339 timestamp.
 func parseUntil(s string) (time.Time, error) {
+	// Try as a relative duration first (more common usage).
 	d, err := time.ParseDuration(s)
 	if err == nil {
 		return time.Now().Add(-d), nil

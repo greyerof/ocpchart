@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version and commit are set at build time via ldflags in the Makefile.
 var (
 	version = "dev"
 	commit  = "none"
@@ -21,30 +22,34 @@ var (
 	flagInsecureTLS bool
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "ocpchart",
-	Short: "Live ASCII Prometheus charts for OpenShift",
-	Long: `ocpchart queries Prometheus/Thanos on OpenShift clusters and renders
+// NewRootCmd builds the CLI command tree with all subcommands and flags registered.
+func NewRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "ocpchart",
+		Short: "Live ASCII Prometheus charts for OpenShift",
+		Long: `ocpchart queries Prometheus/Thanos on OpenShift clusters and renders
 interactive ASCII charts in the terminal. Supports pan/zoom navigation,
 live auto-refresh, and metric discovery.`,
-	SilenceUsage: true,
-}
+		SilenceUsage: true,
+	}
 
-// init registers root-level persistent auth and TLS flags.
-func init() {
 	pf := rootCmd.PersistentFlags()
 	pf.StringVar(&flagKubeconfig, "kubeconfig", "", "path to kubeconfig (defaults to $KUBECONFIG)")
 	pf.StringVar(&flagThanosURL, "thanos-url", "", "Thanos querier URL (requires --token)")
 	pf.StringVar(&flagToken, "token", "", "bearer token for Thanos (requires --thanos-url)")
 	pf.BoolVar(&flagInsecureTLS, "insecure-tls", false, "skip TLS certificate verification")
+
+	rootCmd.AddCommand(
+		newPlotCmd(),
+		newMetricsCmd(),
+		newVersionCmd(),
+	)
+
+	return rootCmd
 }
 
-// Execute runs the root command.
-func Execute() error {
-	return rootCmd.Execute()
-}
-
-// resolveCredentials validates auth flags and returns credentials.
+// resolveCredentials validates the auth flag combination and returns the
+// appropriate credentials (kubeconfig auto-discovery or manual token+URL).
 func resolveCredentials() (*auth.Credentials, error) {
 	if err := config.ValidateAuthFlags(flagKubeconfig, flagThanosURL, flagToken); err != nil {
 		return nil, err
@@ -64,7 +69,7 @@ func resolveCredentials() (*auth.Credentials, error) {
 	return creds, nil
 }
 
-// resolveClient builds auth + thanos client in one step.
+// resolveClient resolves auth credentials and creates a Thanos API client.
 func resolveClient() (*thanos.Client, error) {
 	creds, err := resolveCredentials()
 	if err != nil {

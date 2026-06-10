@@ -6,15 +6,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("ocpchart %s (commit: %s)\n", version, commit)
-	},
-}
-
-// init registers the version command.
-func init() {
-	rootCmd.AddCommand(versionCmd)
+// newVersionCmd builds the "version" subcommand, which prints the build version
+// and commit hash injected at compile time via ldflags.
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("ocpchart %s (commit: %s)\n", version, commit)
+		},
+	}
 }
