@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"github.com/greyerof/ocpchart/internal/auth"
 	"github.com/greyerof/ocpchart/internal/config"
@@ -10,10 +11,36 @@ import (
 )
 
 // version and commit are set at build time via ldflags in the Makefile.
+// When not set (e.g. go install ...@latest), versionInfo() falls back to
+// runtime/debug.ReadBuildInfo which Go populates automatically.
 var (
 	version = "dev"
 	commit  = "none"
 )
+
+func versionInfo() (string, string) {
+	v, c := version, commit
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v, c
+	}
+
+	if v == "dev" && info.Main.Version != "" {
+		v = info.Main.Version
+	}
+
+	if c == "none" {
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" {
+				c = s.Value
+				break
+			}
+		}
+	}
+
+	return v, c
+}
 
 var (
 	flagKubeconfig  string
