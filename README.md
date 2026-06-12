@@ -10,8 +10,23 @@ This whole project has been totally vibe coded using Cursor.
 
 - **Interactive charts** -- run a PromQL range query, explore with pan/zoom/series navigation
 - **Live mode** -- auto-refreshing charts with a rolling time window via `--refresh`
+
+  <div align="center">
+    <video src="https://github.com/greyerof/ocpchart/releases/download/v0.0.1/ocpchart-plot-live.mp4" width="90%" autoplay muted loop style="border: 2px solid #888;"></video>
+  </div>
+
 - **One-shot charts** -- static ASCII output via `--once`
+
+  <div align="center">
+    <video src="https://github.com/greyerof/ocpchart/releases/download/v0.0.1/ocpchart-plot-once.mp4" width="90%" autoplay muted loop style="border: 2px solid #888;"></video>
+  </div>
+
 - **Metric discovery** -- list all available Prometheus metrics, filter by regex
+
+  <div align="center">
+    <video src="https://github.com/greyerof/ocpchart/releases/download/v0.0.1/ocpchart-metrics-list.mp4" width="90%" autoplay muted loop style="border: 2px solid #888;"></video>
+  </div>
+
 - **Two auth modes** -- kubeconfig auto-discovery or manual token + URL
 
 ## Installation
