@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0](https://github.com/guptarohit/asciigraph/compare/v0.9.0...v0.10.0) (2026-06-21)
+
+
+### Added
+
+* threshold coloring: `ColorAbove`/`ColorBelow` options and `-ca`/`-cb` CLI flags ([#85](https://github.com/guptarohit/asciigraph/pull/85))
+* spectrum/heatmap gradient coloring: `SeriesColorGradient` option, `HeatmapSpectrum` palette, and `-g` CLI flag ([#84](https://github.com/guptarohit/asciigraph/pull/84))
+* flicker-free realtime mode via `ClearLines`, redrawing only the previous graph ([#79](https://github.com/guptarohit/asciigraph/pull/79)), closes [#44](https://github.com/guptarohit/asciigraph/issues/44)
+
 ## [0.9.0](https://github.com/guptarohit/asciigraph/compare/v0.8.1...v0.9.0) (2026-03-28)
 
 

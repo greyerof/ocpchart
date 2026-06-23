@@ -29,9 +29,11 @@ func addLegends(lines *bytes.Buffer, config *config, lenMax int, leftPad int) {
 	var legendsTextLen int
 	rightPad := 3
 	for i, text := range config.SeriesLegends {
-		// Use default color if SeriesColors is not set or index is out of range
+		// Use default color if SeriesColors is not set or index is out of range.
+		// A gradient colors points by value, not per series, so leave the legend
+		// boxes default rather than showing colors that aren't in the plot.
 		color := Default
-		if i < len(config.SeriesColors) {
+		if len(config.Gradient) == 0 && i < len(config.SeriesColors) {
 			color = config.SeriesColors[i]
 		}
 

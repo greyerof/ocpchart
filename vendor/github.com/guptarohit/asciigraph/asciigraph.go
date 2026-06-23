@@ -219,6 +219,31 @@ func PlotMany(data [][]float64, options ...Option) string {
 		plot[w][config.Offset-1].Color = config.AxisColor
 	}
 
+	// When a gradient is configured, precompute a color for each plot row from
+	// its magnitude so points are colored by value instead of by series.
+	var rowColors []AnsiColor
+	if len(config.Gradient) > 0 {
+		rowColors = make([]AnsiColor, len(magnitudes))
+		for r, m := range magnitudes {
+			rowColors[r] = gradientColor(config.Gradient, m, minimum, maximum)
+		}
+	}
+	pickColor := func(plotRow int, seriesColor AnsiColor) AnsiColor {
+		// Thresholds take precedence over a gradient, which takes precedence over
+		// the per-series color.
+		magnitude := magnitudes[plotRow]
+		if config.AboveThreshold != nil && magnitude > *config.AboveThreshold {
+			return config.AboveColor
+		}
+		if config.BelowThreshold != nil && magnitude < *config.BelowThreshold {
+			return config.BelowColor
+		}
+		if rowColors != nil {
+			return rowColors[plotRow]
+		}
+		return seriesColor
+	}
+
 	for i := range data {
 		series := data[i]
 
@@ -249,14 +274,14 @@ func PlotMany(data [][]float64, options ...Option) string {
 			if math.IsNaN(d1) && !math.IsNaN(d0) {
 				y0 = int(round(d0*ratio) - float64(intmin2))
 				plot[rows-y0][x+config.Offset].Text = charSet.EndCap
-				plot[rows-y0][x+config.Offset].Color = color
+				plot[rows-y0][x+config.Offset].Color = pickColor(rows-y0, color)
 				continue
 			}
 
 			if math.IsNaN(d0) && !math.IsNaN(d1) {
 				y1 = int(round(d1*ratio) - float64(intmin2))
 				plot[rows-y1][x+config.Offset].Text = charSet.StartCap
-				plot[rows-y1][x+config.Offset].Color = color
+				plot[rows-y1][x+config.Offset].Color = pickColor(rows-y1, color)
 				continue
 			}
 
@@ -284,7 +309,7 @@ func PlotMany(data [][]float64, options ...Option) string {
 			start := int(math.Min(float64(y0), float64(y1)))
 			end := int(math.Max(float64(y0), float64(y1)))
 			for y := start; y <= end; y++ {
-				plot[rows-y][x+config.Offset].Color = color
+				plot[rows-y][x+config.Offset].Color = pickColor(rows-y, color)
 			}
 		}
 	}
