@@ -3,7 +3,7 @@ module github.com/greyerof/ocpchart
 go 1.26.2
 
 require (
-	github.com/guptarohit/asciigraph v0.9.0
+	github.com/guptarohit/asciigraph v0.10.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.69.0
 	github.com/spf13/cobra v1.10.2

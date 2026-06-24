@@ -65,6 +65,11 @@ type config struct {
 	AxisColor              AnsiColor
 	LabelColor             AnsiColor
 	SeriesColors           []AnsiColor
+	Gradient               []AnsiColor
+	AboveThreshold         *float64
+	AboveColor             AnsiColor
+	BelowThreshold         *float64
+	BelowColor             AnsiColor
 	SeriesLegends          []string
 	LineEnding             string
 	SeriesChars            []CharSet
@@ -175,6 +180,40 @@ func LabelColor(ac AnsiColor) Option {
 func SeriesColors(ac ...AnsiColor) Option {
 	return optionFunc(func(c *config) {
 		c.SeriesColors = ac
+	})
+}
+
+// SeriesColorGradient colors each plotted point by its value along the given
+// stops (lowest value uses the first stop, highest the last), producing a
+// heatmap-style gradient instead of a single solid color. It applies to all
+// series and takes precedence over SeriesColors for the plotted points; legend
+// boxes are left uncolored while a gradient is active. Passing no stops disables
+// it. Use the built-in HeatmapSpectrum for a ready-made cool-to-warm palette.
+func SeriesColorGradient(stops ...AnsiColor) Option {
+	gradient := append([]AnsiColor(nil), stops...)
+	return optionFunc(func(c *config) {
+		c.Gradient = gradient
+	})
+}
+
+// ColorAbove colors points whose value is strictly above threshold (value >
+// threshold) with the given color, across all series. It takes precedence over
+// SeriesColorGradient and SeriesColors; other points keep their normal color.
+func ColorAbove(color AnsiColor, threshold float64) Option {
+	return optionFunc(func(c *config) {
+		c.AboveThreshold = &threshold
+		c.AboveColor = color
+	})
+}
+
+// ColorBelow colors points whose value is strictly below threshold (value <
+// threshold) with the given color, across all series. It takes precedence over
+// SeriesColorGradient and SeriesColors; if a point also matches ColorAbove,
+// ColorAbove wins.
+func ColorBelow(color AnsiColor, threshold float64) Option {
+	return optionFunc(func(c *config) {
+		c.BelowThreshold = &threshold
+		c.BelowColor = color
 	})
 }
 
