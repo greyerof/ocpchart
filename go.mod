@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/guptarohit/asciigraph v0.9.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/prometheus/common v0.68.1
+	github.com/prometheus/common v0.69.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.44.0
 	k8s.io/api v0.36.2
